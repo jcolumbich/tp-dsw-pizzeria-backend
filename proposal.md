@@ -1,4 +1,3 @@
-[proposal (1).md](https://github.com/user-attachments/files/29980869/proposal.1.md)
 
 # Propuesta TP DSW
 
