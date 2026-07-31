@@ -2,13 +2,12 @@ import { Entity, PrimaryKey, Property } from "@mikro-orm/core";
 
 @Entity()
 export class Ingrediente {
-  @PrimaryKey()
+  @PrimaryKey({ type: "number" })
   id!: number;
 
-  @Property()
+  @Property({ type: "string" })
   nombre!: string;
 
-  @Property()
+  @Property({ type: "number" })
   stock!: number;
 }
-

@@ -1,20 +1,21 @@
 import express, { Request, Response, Router } from "express";
+import { RequestContext } from "@mikro-orm/core";
+import { Ingrediente } from "../entities/ingrediente.entity";
 
 const router: Router = express.Router();
 
-const ingredientes = [
-  { id: 1, nombre: "Muzzarella", stock: 50 },
-  { id: 2, nombre: "Jamón", stock: 30 },
-  { id: 3, nombre: "Morrones", stock: 20 },
-];
-
-router.get("/", (req: Request, res: Response) => {
+// GET /ingredientes → todos
+router.get("/", async (req: Request, res: Response) => {
+  const em = RequestContext.getEntityManager()!;
+  const ingredientes = await em.find(Ingrediente, {});
   res.json(ingredientes);
 });
 
-router.get("/:id", (req: Request, res: Response) => {
+// GET /ingredientes/:id → uno solo
+router.get("/:id", async (req: Request, res: Response) => {
+  const em = RequestContext.getEntityManager()!;
   const id = Number(req.params.id);
-  const ingrediente = ingredientes.find((i) => i.id === id);
+  const ingrediente = await em.findOne(Ingrediente, { id });
 
   if (!ingrediente) {
     return res.status(404).json({ error: "Ingrediente no encontrado" });
@@ -23,20 +24,24 @@ router.get("/:id", (req: Request, res: Response) => {
   res.json(ingrediente);
 });
 
-router.post("/", (req: Request, res: Response) => {
-  const nuevoIngrediente = {
-    id: ingredientes.length + 1,
+// POST /ingredientes → crear
+router.post("/", async (req: Request, res: Response) => {
+  const em = RequestContext.getEntityManager()!;
+
+  const nuevoIngrediente = em.create(Ingrediente, {
     nombre: req.body.nombre,
     stock: req.body.stock,
-  };
+  });
 
-  ingredientes.push(nuevoIngrediente);
+  await em.persistAndFlush(nuevoIngrediente);
   res.status(201).json(nuevoIngrediente);
 });
 
-router.put("/:id", (req: Request, res: Response) => {
+// PUT /ingredientes/:id → actualizar
+router.put("/:id", async (req: Request, res: Response) => {
+  const em = RequestContext.getEntityManager()!;
   const id = Number(req.params.id);
-  const ingrediente = ingredientes.find((i) => i.id === id);
+  const ingrediente = await em.findOne(Ingrediente, { id });
 
   if (!ingrediente) {
     return res.status(404).json({ error: "Ingrediente no encontrado" });
@@ -44,18 +49,22 @@ router.put("/:id", (req: Request, res: Response) => {
 
   ingrediente.nombre = req.body.nombre;
   ingrediente.stock = req.body.stock;
+  await em.flush();
+
   res.json(ingrediente);
 });
 
-router.delete("/:id", (req: Request, res: Response) => {
+// DELETE /ingredientes/:id → eliminar
+router.delete("/:id", async (req: Request, res: Response) => {
+  const em = RequestContext.getEntityManager()!;
   const id = Number(req.params.id);
-  const index = ingredientes.findIndex((i) => i.id === id);
+  const ingrediente = await em.findOne(Ingrediente, { id });
 
-  if (index === -1) {
+  if (!ingrediente) {
     return res.status(404).json({ error: "Ingrediente no encontrado" });
   }
 
-  ingredientes.splice(index, 1);
+  await em.removeAndFlush(ingrediente);
   res.status(204).send();
 });
 
