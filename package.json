@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
- "scripts": {
-  "dev": "tsx src/app.ts"
-},
+  "scripts": {
+    "dev": "tsx src/app.ts"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jcolumbich/tp-dsw-pizzeria-backend.git"
@@ -19,8 +19,8 @@
   },
   "homepage": "https://github.com/jcolumbich/tp-dsw-pizzeria-backend#readme",
   "dependencies": {
-    "@mikro-orm/core": "^7.1.9",
-    "@mikro-orm/mysql": "^7.1.9",
+    "@mikro-orm/core": "^5.9.8",
+    "@mikro-orm/mysql": "^5.9.8",
     "dotenv": "^17.4.2",
     "express": "^5.2.1"
   },
