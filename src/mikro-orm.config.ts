@@ -2,8 +2,10 @@ import { MySqlDriver } from "@mikro-orm/mysql";
 import { Ingrediente } from "./entities/ingrediente.entity";
 import { Repartidor } from "./entities/repartidor.entity";
 import { Pizza } from "./entities/pizza.entity";
+import { Cliente } from "./entities/cliente.entity";
+
 export default {
-  entities: [Ingrediente, Repartidor, Pizza],
+  entities: [Ingrediente, Repartidor, Pizza, Cliente],
   dbName: process.env.DB_NAME || "pizzeria",
   host: process.env.DB_HOST || "localhost",
   port: Number(process.env.DB_PORT) || 3306,
