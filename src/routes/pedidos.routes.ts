@@ -4,6 +4,8 @@ import { Pedido } from "../entities/pedido.entity";
 import { Cliente } from "../entities/cliente.entity";
 import { Pizza } from "../entities/pizza.entity";
 import { ItemPedido } from "../entities/item-pedido.entity";
+import { Repartidor } from "../entities/repartidor.entity";
+
 
 const router: Router = express.Router();
 
@@ -78,6 +80,40 @@ router.post("/", async (req: Request, res: Response) => {
   await em.persistAndFlush(pedido);
   res.status(201).json(pedido);
 });
+
+
+// PUT /pedidos/:id/asignar-envio → el 2do CUU: asignar repartidor y costo, actualizar estado
+router.put("/:id/asignar-envio", async (req: Request, res: Response) => {
+  const em = RequestContext.getEntityManager()!;
+  const id = Number(req.params.id);
+
+  const pedido = await em.findOne(Pedido, { id });
+  if (!pedido) {
+    return res.status(404).json({ error: "Pedido no encontrado" });
+  }
+
+  const repartidor = await em.findOne(Repartidor, { id: req.body.repartidorId });
+  if (!repartidor) {
+    return res.status(404).json({ error: "Repartidor no encontrado" });
+  }
+
+  pedido.repartidor = repartidor;
+  pedido.costoEnvio = req.body.costoEnvio;
+  pedido.estado = "En viaje";
+
+  await em.flush();
+  res.json(pedido);
+});
+
+
+
+
+
+
+
+
+
+
 
 export default router;
 
