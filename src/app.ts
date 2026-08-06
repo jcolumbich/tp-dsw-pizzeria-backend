@@ -7,7 +7,7 @@ import repartidoresRoutes from "./routes/repartidores.routes";
 import pizzasRoutes from "./routes/pizzas.routes";
 import clientesRoutes from "./routes/clientes.routes";
 import pedidosRoutes from "./routes/pedidos.routes";
-
+import cors from "cors";
 
 const PUERTO = 3000;
 
@@ -16,7 +16,7 @@ async function main() {
 
   const app = express();
   app.use(express.json());
-
+  app.use(cors());
   app.use((req, res, next) => {
     RequestContext.create(orm.em, next);
   });
