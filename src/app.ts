@@ -1,39 +1,55 @@
-import "reflect-metadata";
-import express, { Request, Response } from "express";
-import { MikroORM, RequestContext } from "@mikro-orm/core";
-import mikroOrmConfig from "./mikro-orm.config";
-import ingredientesRoutes from "./routes/ingredientes.routes";
-import repartidoresRoutes from "./routes/repartidores.routes";
-import pizzasRoutes from "./routes/pizzas.routes";
-import clientesRoutes from "./routes/clientes.routes";
-import pedidosRoutes from "./routes/pedidos.routes";
-import cors from "cors";
+import 'reflect-metadata'; 
+import express from 'express';
+import { RequestContext } from '@mikro-orm/core';
+import { orm, syncSchema } from './shared/db/orm.js';
+import { ingredienteRouter } from './ingrediente/ingrediente.routes.js';
+import { pizzaRouter } from './pizza/pizza.routes.js';
+import { repartidorRouter } from './repartidor/repartidor.routes.js';
+import { pedidoRouter } from './pedido/pedido.routes.js';
+import { detallePedidoRouter } from './detalle-pedido/detalle-pedido.routes.js';
+import { envioRouter } from './envio/envio.routes.js';
+import { ingredientePizzaRouter } from './ingrediente-pizza/ingrediente-pizza.routes.js';
+import { clienteRouter } from './cliente/cliente.routes.js';
 
-const PUERTO = 3000;
 
-async function main() {
-  const orm = await MikroORM.init(mikroOrmConfig);
+const app = express();
+app.use(express.json()); // Middleware para parsear JSONs en el body
 
-  const app = express();
-  app.use(express.json());
-  app.use(cors());
-  app.use((req, res, next) => {
-    RequestContext.create(orm.em, next);
-  });
+// Sincronizamos la base de datos automáticamente al arrancar
+await syncSchema();
 
-  app.use("/ingredientes", ingredientesRoutes);
-  app.use("/repartidores", repartidoresRoutes);
-  app.use("/pizzas", pizzasRoutes);
-  app.use("/clientes", clientesRoutes);
-  app.use("/pedidos", pedidosRoutes);
-  
-  app.get("/", (req: Request, res: Response) => {
-    res.send("¡Bienvenido a la pizzería!");
-  });
+// Middleware de contexto para que cada request tenga su propia transacción limpia
+app.use((req, res, next) => {
+  RequestContext.create(orm.em, next);
+});
 
-  app.listen(PUERTO, () => {
-    console.log(`Servidor corriendo en http://localhost:${PUERTO}`);
-  });
-}
+// Registramos el router de ingredientes
+app.use('/api/ingredientes', ingredienteRouter);
 
-main();
+// Registramos el router de pizza
+app.use('/api/pizzas', pizzaRouter);
+
+// Registramos el router de repartidores
+app.use('/api/repartidores', repartidorRouter);
+
+// Registramos el router de pedidos
+app.use('/api/pedidos', pedidoRouter);
+
+// Registramos el router de detalle de pedidos
+app.use('/api/detalle-pedido', detallePedidoRouter);
+
+app.use('/api/envios', envioRouter);
+
+// Registramos el router de ingrediente-pizza
+app.use('/api/ingrediente-pizza', ingredientePizzaRouter);
+
+app.use('/api/clientes', clienteRouter);
+
+// Manejador global para endpoints inexistentes (404)
+app.use((_, res) => {
+  return res.status(404).json({ message: 'Recurso no encontrado' });
+});
+
+app.listen(3000, () => {
+  console.log('Servidor corriendo con éxito en http://localhost:3000');
+});

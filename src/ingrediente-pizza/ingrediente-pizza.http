@@ -1,0 +1,87 @@
+### Crear una pizza de prueba primero (necesaria para el ingrediente-pizza)
+POST http://localhost:3000/api/pizzas HTTP/1.1
+Content-Type: application/json
+
+{
+  "nombre": "Napolitana",
+  "precio": 4500,
+  "vegetariana": false,
+  "disponible": true
+}
+
+###
+
+### Crear un ingrediente de prueba (necesario para el ingrediente-pizza)
+POST http://localhost:3000/api/ingredientes HTTP/1.1
+Content-Type: application/json
+
+{
+  "nombre": "Queso Muzzarella",
+  "stock": 100
+}
+
+###
+
+### Obtener todos los ingredientes de pizza
+GET http://localhost:3000/api/ingrediente-pizza HTTP/1.1
+
+###
+
+### Crear un ingrediente-pizza (usá los ids reales que te devolvieron los POST de arriba)
+POST http://localhost:3000/api/ingrediente-pizza HTTP/1.1
+Content-Type: application/json
+
+{
+  "cantidad": 200,
+  "pizzaId": 1,
+  "ingredienteId": 1
+}
+
+###
+
+### Probar validación: pizzaId inexistente (debería devolver 404)
+POST http://localhost:3000/api/ingrediente-pizza HTTP/1.1
+Content-Type: application/json
+
+{
+  "cantidad": 100,
+  "pizzaId": 9999,
+  "ingredienteId": 1
+}
+
+###
+
+### Probar validación: ingredienteId inexistente (debería devolver 404)
+POST http://localhost:3000/api/ingrediente-pizza HTTP/1.1
+Content-Type: application/json
+
+{
+  "cantidad": 100,
+  "pizzaId": 1,
+  "ingredienteId": 9999
+}
+
+###
+
+### Obtener un ingrediente-pizza por ID (incluye pizza e ingrediente poblados)
+GET http://localhost:3000/api/ingrediente-pizza/1 HTTP/1.1
+
+###
+
+### Obtener la composición completa de una pizza (todos sus ingredientes)
+GET http://localhost:3000/api/ingrediente-pizza/pizza/1 HTTP/1.1
+
+###
+
+### Modificar la cantidad de un ingrediente-pizza
+PUT http://localhost:3000/api/ingrediente-pizza/1 HTTP/1.1
+Content-Type: application/json
+
+{
+  "cantidad": 250
+}
+
+###
+
+### Eliminar un ingrediente-pizza
+DELETE http://localhost:3000/api/ingrediente-pizza/1 HTTP/1.1

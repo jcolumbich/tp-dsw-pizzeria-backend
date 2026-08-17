@@ -1,0 +1,59 @@
+### Obtener todos los repartidores (Devuelve la lista completa de la BD)
+GET http://localhost:3000/api/repartidores HTTP/1.1
+
+###
+
+### Crear un nuevo repartidor (Pasa por tu middleware de sanitización)
+POST http://localhost:3000/api/repartidores HTTP/1.1
+Content-Type: application/json
+
+{
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "email": "juan.perez@mail.com",
+  "contrasenia": "clave123",
+  "nivel_permisos": 1,
+  "estado": true,
+  "matricula": "MOT-1234",
+  "monto_propina_total": 0
+}
+
+###
+
+### Probar sanitización (Se crea con los campos válidos, pero ignora la propiedad basura)
+POST http://localhost:3000/api/repartidores HTTP/1.1
+Content-Type: application/json
+
+{
+  "nombre": "María",
+  "apellido": "Gómez",
+  "email": "maria.gomez@mail.com",
+  "contrasenia": "clave456",
+  "nivel_permisos": 1,
+  "estado": true,
+  "matricula": "MOT-5678",
+  "monto_propina_total": 0,
+  "propiedadInyectada": "hack",
+  "idFalso": 9999
+}
+
+###
+
+### Obtener un repartidor por ID (Cambiá el '1' por el ID autoincremental que te devuelva tu POST)
+GET http://localhost:3000/api/repartidores/1 HTTP/1.1
+
+###
+
+### Modificar un repartidor por ID (Modifica cualquiera de sus campos)
+PUT http://localhost:3000/api/repartidores/1 HTTP/1.1
+Content-Type: application/json
+
+{
+  "monto_propina_total": 500.75,
+  "estado": false
+}
+
+###
+
+### Eliminar un repartidor por ID
+DELETE http://localhost:3000/api/repartidores/1 HTTP/1.1

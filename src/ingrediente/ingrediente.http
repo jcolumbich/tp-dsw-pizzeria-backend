@@ -1,0 +1,47 @@
+### Obtener todos los ingredientes (Devuelve la lista completa de la BD)
+GET http://localhost:3000/api/ingredientes HTTP/1.1
+
+###
+
+### Crear un nuevo ingrediente (Pasa por tu middleware de sanitización)
+POST http://localhost:3000/api/ingredientes HTTP/1.1
+Content-Type: application/json
+
+{
+  "nombre": "Muzzarella",
+  "stock": 45
+}
+
+###
+
+### Probar sanitización (Se crea con nombre y stock, pero ignora la propiedad basura)
+POST http://localhost:3000/api/ingredientes HTTP/1.1
+Content-Type: application/json
+
+{
+  "nombre": "Salsa de Tomate",
+  "stock": 20,
+  "propiedadInyectada": "hack",
+  "precioFalso": 9999
+}
+
+###
+
+### Obtener un ingrediente por ID (Cambiá el '1' por el ID autoincremental que te devuelva tu POST)
+GET http://localhost:3000/api/ingredientes/1 HTTP/1.1
+
+###
+
+### Modificar un ingrediente por ID (Modifica nombre y/o stock)
+PUT http://localhost:3000/api/ingredientes/1 HTTP/1.1
+Content-Type: application/json
+
+{
+  "nombre": "Muzzarella Especial",
+  "stock": 50.0
+}
+
+###
+
+### Eliminar un ingrediente por ID
+DELETE http://localhost:3000/api/ingredientes/1 HTTP/1.1
