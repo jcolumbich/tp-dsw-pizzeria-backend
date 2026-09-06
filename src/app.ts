@@ -10,10 +10,11 @@ import { detallePedidoRouter } from './detalle-pedido/detalle-pedido.routes.js';
 import { envioRouter } from './envio/envio.routes.js';
 import { ingredientePizzaRouter } from './ingrediente-pizza/ingrediente-pizza.routes.js';
 import { clienteRouter } from './cliente/cliente.routes.js';
-
+import cors from 'cors';
 
 const app = express();
 app.use(express.json()); // Middleware para parsear JSONs en el body
+app.use(cors()); // Middleware para habilitar CORS
 
 // Sincronizamos la base de datos automáticamente al arrancar
 await syncSchema();
