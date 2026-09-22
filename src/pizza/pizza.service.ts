@@ -1,8 +1,12 @@
+// src/pizza/pizza.service.ts
+
 import { Pizza } from './pizza.entity.js';
 import { PizzaRepository } from './pizza.repository.js';
+import { IngredientePizzaRepository } from '../ingrediente-pizza/ingrediente-pizza.repository.js';
 import { HttpError } from '../shared/http-error.js';
 
 const repository = new PizzaRepository();
+const ingredientePizzaRepository = new IngredientePizzaRepository();
 
 export async function listarPizzas(): Promise<Pizza[]> {
   return repository.findAll();
@@ -58,6 +62,15 @@ export async function actualizarPizza(id: number, datos: any): Promise<Pizza> {
 }
 
 export async function eliminarPizza(id: number): Promise<void> {
+  const pizza = await repository.findOne(id);
+  if (!pizza) throw new HttpError(404, 'Pizza no encontrada');
+
+  // Cascade manual: borramos primero la composición de ingredientes de esta pizza
+  const composicion = await ingredientePizzaRepository.findByPizza(id);
+  for (const item of composicion) {
+    await ingredientePizzaRepository.delete(id, item.ingrediente.id);
+  }
+
   const eliminada = await repository.delete(id);
   if (!eliminada) throw new HttpError(404, 'Pizza no encontrada');
 }

@@ -7,20 +7,21 @@ import {
   remove, 
   sanitizePizzaInput 
 } from './pizza.controller.js';
+import { requiereNivel } from '../auth/auth.middleware.js';
 
 export const pizzaRouter = Router();
 
-// Obtener todas las pizzas
+// Obtener todas las pizzas (cualquier usuario logueado, Cliente o Admin)
 pizzaRouter.get('/', findAll);
 
-// Obtener una pizza por ID
+// Obtener una pizza por ID (cualquier usuario logueado)
 pizzaRouter.get('/:id', findOne);
 
-// Crear una nueva pizza (pasa primero por la sanitización)
-pizzaRouter.post('/', sanitizePizzaInput, add);
+// Crear una nueva pizza (solo Admin)
+pizzaRouter.post('/', requiereNivel(1), sanitizePizzaInput, add);
 
-// Modificar una pizza por ID (pasa primero por la sanitización)
-pizzaRouter.put('/:id', sanitizePizzaInput, update);
+// Modificar una pizza por ID (solo Admin)
+pizzaRouter.put('/:id', requiereNivel(1), sanitizePizzaInput, update);
 
-// Eliminar una pizza por ID
-pizzaRouter.delete('/:id', remove);
+// Eliminar una pizza por ID (solo Admin)
+pizzaRouter.delete('/:id', requiereNivel(1), remove);

@@ -26,8 +26,18 @@ export function sanitizePedidoInput(req: Request, res: Response, next: NextFunct
 export async function findAll(req: Request, res: Response) {
   try {
     const estado = req.query.estado as string | undefined;
-    const pedidos = await service.listarPedidos(estado);
-    return res.status(200).json({ message: 'Todos los pedidos recuperados', data: pedidos });
+
+    if (!req.usuario) {
+      return res.status(401).json({ message: 'Usuario no autenticado' });
+    }
+
+    const clienteId = req.usuario.nivel_permisos === 0 ? req.usuario.id : undefined;
+    const pedidos = await service.listarPedidos(estado, clienteId);
+
+    return res.status(200).json({
+      message: req.usuario.nivel_permisos === 0 ? 'Pedidos del cliente recuperados' : 'Todos los pedidos recuperados',
+      data: pedidos,
+    });
   } catch (error) {
     return handleError(res, error);
   }
@@ -36,11 +46,21 @@ export async function findAll(req: Request, res: Response) {
 export async function findOne(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
+
     if (isNaN(id)) {
       return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
     }
 
+    if (!req.usuario) {
+      return res.status(401).json({ message: 'Usuario no autenticado' });
+    }
+
     const pedido = await service.buscarPedido(id);
+
+    if (req.usuario.nivel_permisos === 0 && pedido.cliente?.id !== req.usuario.id) {
+      return res.status(403).json({ message: 'No tenés permiso para consultar este pedido' });
+    }
+
     return res.status(200).json({ data: pedido });
   } catch (error) {
     return handleError(res, error);
@@ -49,7 +69,13 @@ export async function findOne(req: Request, res: Response) {
 
 export async function add(req: Request, res: Response) {
   try {
-    const { retiro, clienteId, items } = req.body.pedidoInput;
+    const { retiro, items } = req.body.pedidoInput;
+
+    const clienteId =
+      req.usuario && req.usuario.nivel_permisos === 0
+        ? req.usuario.id
+        : req.body.pedidoInput.clienteId;
+
     const nuevoPedido = await service.crearPedido(retiro, clienteId, items);
     return res.status(201).json({ message: 'Pedido creado con éxito', data: nuevoPedido });
   } catch (error) {
@@ -64,7 +90,6 @@ export async function update(req: Request, res: Response) {
       return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
     }
 
-    // "items" y "clienteId" solo tienen sentido en la creación (add).
     delete req.body.pedidoInput.items;
     delete req.body.pedidoInput.clienteId;
 
@@ -74,15 +99,28 @@ export async function update(req: Request, res: Response) {
     return handleError(res, error);
   }
 }
-export async function remove(req: Request, res: Response) {
+
+export async function asignarEnvio(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
+    const repartidorId = Number(req.body.repartidorId);
+    const costo = Number(req.body.costo);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({message: 'El ID del pedido debe ser un número entero válido',});
     }
 
-    await service.eliminarPedido(id);
-    return res.status(200).json({ message: 'Pedido eliminado exitosamente' });
+    if (!Number.isInteger(repartidorId) || repartidorId <= 0) {
+      return res.status(400).json({  message: 'El repartidorId debe ser un número entero válido',});
+    }
+
+    if (!Number.isFinite(costo) || costo < 0) {
+      return res.status(400).json({message: 'El costo debe ser un número mayor o igual a 0',});
+    }
+
+    const pedido = await service.asignarEnvio(id,repartidorId,costo);
+
+    return res.status(200).json({message: 'Envío y repartidor asignados correctamente',data: pedido,});
   } catch (error) {
     return handleError(res, error);
   }

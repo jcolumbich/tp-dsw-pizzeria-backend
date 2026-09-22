@@ -1,6 +1,7 @@
 import { orm } from '../shared/db/orm.js';
 import { Repartidor } from './repartidor.entity.js';
 import { Repository } from '../shared/repository.js';
+import { Pedido } from '../pedido/pedido.entity.js';
 
 export class RepartidorRepository implements Repository<Repartidor> {
   async findAll(): Promise<Repartidor[]> {
@@ -11,6 +12,10 @@ export class RepartidorRepository implements Repository<Repartidor> {
     return orm.em.findOne(Repartidor, { id });
   }
 
+  async findByEmail(email: string): Promise<Repartidor | null> {
+  return orm.em.findOne(Repartidor, { email });
+  }
+  
   async add(item: Repartidor): Promise<Repartidor> {
     const repartidor = orm.em.create(Repartidor, item);
     await orm.em.persistAndFlush(repartidor);
@@ -24,6 +29,11 @@ export class RepartidorRepository implements Repository<Repartidor> {
     await orm.em.flush();
     return repartidor;
   }
+
+  async tienePedidosAsignados(id: number): Promise<boolean> {
+  const cantidad = await orm.em.count(Pedido, { repartidor: id });
+  return cantidad > 0;
+ }
 
   async delete(id: number): Promise<boolean> {
     const repartidor = await orm.em.findOne(Repartidor, { id });

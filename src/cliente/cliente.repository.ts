@@ -11,6 +11,10 @@ export class ClienteRepository implements Repository<Cliente> {
     return orm.em.findOne(Cliente, { id });
   }
 
+  async findByEmail(email: string): Promise<Cliente | null> {
+  return orm.em.findOne(Cliente, { email });
+  } 
+
   async add(item: Cliente): Promise<Cliente> {
     const cliente = orm.em.create(Cliente, item);
     await orm.em.persistAndFlush(cliente);

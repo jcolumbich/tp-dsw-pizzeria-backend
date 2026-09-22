@@ -8,7 +8,7 @@ export class Envio extends BaseEntity {
   costo!: number;
 
   @Property({ type: 'double' })
-  monto_propina!: number;
+  monto_propina?: number = 0;
 
   @OneToOne(() => Pedido, { owner: true, nullable: false })
   pedido!: Rel<Pedido>;
