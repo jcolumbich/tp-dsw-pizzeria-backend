@@ -2,9 +2,29 @@ import { Request, Response, NextFunction } from 'express';
 import * as service from './repartidor.service.js';
 import { handleError } from '../shared/handle-error.js';
 
-export function sanitizeRepartidorInput(req: Request, res: Response, next: NextFunction) {
-  if (!req.body) {
-    return res.status(400).json({ message: 'El cuerpo de la petición es requerido' });
+export function sanitizeRepartidorInput(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({
+      message: 'El cuerpo de la petición debe ser un objeto',
+    });
+  }
+
+  const esActualizacion = req.method === 'PUT' || req.method === 'PATCH';
+
+  if (
+  esActualizacion &&
+  (
+    Object.prototype.hasOwnProperty.call(req.body, 'nivel_permisos') ||
+    Object.prototype.hasOwnProperty.call(req.body, 'monto_propina_total')
+  )
+ ) {
+  return res.status(400).json({
+    message: 'La actualización contiene campos no permitidos',
+  });
   }
 
   req.body.repartidorInput = {
@@ -12,10 +32,12 @@ export function sanitizeRepartidorInput(req: Request, res: Response, next: NextF
     apellido: req.body.apellido,
     email: req.body.email,
     contrasenia: req.body.contrasenia,
-    nivel_permisos: req.body.nivel_permisos,
+    nivel_permisos: esActualizacion ? undefined : req.body.nivel_permisos,
     estado: req.body.estado,
     matricula: req.body.matricula,
-    monto_propina_total: req.body.monto_propina_total,
+    monto_propina_total: esActualizacion
+      ? undefined
+      : req.body.monto_propina_total,
   };
 
   Object.keys(req.body.repartidorInput).forEach((key) => {
