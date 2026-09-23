@@ -1,16 +1,12 @@
 import { Pedido } from './pedido.entity.js';
 import { PedidoRepository, ItemPedidoInput } from './pedido.repository.js';
-import { PizzaRepository } from '../pizza/pizza.repository.js';
-import { ClienteRepository } from '../cliente/cliente.repository.js';
-import { DetallePedidoRepository } from '../detalle-pedido/detalle-pedido.repository.js';
+
 import { RepartidorRepository } from '../repartidor/repartidor.repository.js';
 import { EnvioRepository } from '../envio/envio.repository.js';
 import { HttpError } from '../shared/http-error.js';
 
 const repository = new PedidoRepository();
-const pizzaRepository = new PizzaRepository();
-const clienteRepository = new ClienteRepository();
-const detallePedidoRepository = new DetallePedidoRepository();
+
 const envioRepository = new EnvioRepository();
 const repartidorRepository = new RepartidorRepository();
 
@@ -33,9 +29,11 @@ export async function crearPedido(retiro: unknown, clienteId: unknown, items: un
   if (typeof retiro !== 'boolean') {
     throw new HttpError(400, 'retiro es requerido y debe ser true o false');
   }
-  if (clienteId === undefined || typeof clienteId !== 'number') {
-    throw new HttpError(400, 'clienteId es requerido y debe ser un número');
+
+  if (!Number.isInteger(clienteId) || Number(clienteId) <= 0) {
+    throw new HttpError(400, 'clienteId es requerido y debe ser un número entero mayor a 0');
   }
+
   if (!Array.isArray(items) || items.length === 0) {
     throw new HttpError(400, 'items es requerido y debe ser una lista con al menos una pizza');
   }
@@ -43,45 +41,57 @@ export async function crearPedido(retiro: unknown, clienteId: unknown, items: un
   const itemsInput = items as ItemInput[];
 
   for (const item of itemsInput) {
-    if (typeof item.pizzaId !== 'number' || typeof item.cantidad !== 'number' || item.cantidad <= 0) {
-      throw new HttpError(400, 'Cada item debe tener pizzaId (número) y cantidad (número mayor a 0)');
+    if (!Number.isInteger(item.pizzaId) || item.pizzaId <= 0 || !Number.isInteger(item.cantidad) || item.cantidad <= 0) {
+      throw new HttpError(400, 'Cada item debe tener pizzaId y cantidad como números enteros mayores a 0');
     }
   }
 
-  const cliente = await clienteRepository.findOne(clienteId);
-  if (!cliente) {
-    throw new HttpError(404, `No existe un cliente con id ${clienteId}`);
-  }
+  const itemsAgrupados = new Map<number, number>();
 
-  const itemsConPizza: ItemPedidoInput[] = [];
   for (const item of itemsInput) {
-    const pizza = await pizzaRepository.findOne(item.pizzaId);
-    if (!pizza) {
-      throw new HttpError(404, `No existe una pizza con id ${item.pizzaId}`);
-    }
-    if (!pizza.disponible) {
-      throw new HttpError(400, `La pizza "${pizza.nombre}" no está disponible`);
-    }
-    itemsConPizza.push({ pizza, cantidad: item.cantidad });
+    itemsAgrupados.set(item.pizzaId, (itemsAgrupados.get(item.pizzaId) ?? 0) + item.cantidad);
   }
 
-  return repository.addConItems(retiro, cliente, itemsConPizza);
+  const itemsPedido: ItemPedidoInput[] = [...itemsAgrupados.entries()].map(([pizzaId, cantidad]) => ({ pizzaId, cantidad }));
+
+  return repository.addConItems(retiro, clienteId as number, itemsPedido);
 }
 
-export async function actualizarPedido(
-  id: number,
-  datos: Partial<{ retiro: boolean; estado: string }>
-): Promise<Pedido> {
+export async function actualizarPedido(id: number, datos: Partial<{ retiro: boolean; estado: string }>): Promise<Pedido> {
+  const pedidoActual = await repository.findOne(id);
+
+  if (!pedidoActual) {
+    throw new HttpError(404, 'Pedido no encontrado');
+  }
+
+  if (pedidoActual.estado === 'Cancelado') {
+    if (datos.estado === 'Cancelado') {
+      return pedidoActual;
+    }
+
+    throw new HttpError(409, 'Un pedido cancelado no puede volver a modificarse');
+  }
+
+  if (datos.estado === 'Cancelado') {
+    const pedidoCancelado = await repository.cancelarConReposicion(id);
+
+    if (!pedidoCancelado) {
+      throw new HttpError(404, 'Pedido no encontrado');
+    }
+
+    return pedidoCancelado;
+  }
+
   const pedido = await repository.update(id, datos);
-  if (!pedido) throw new HttpError(404, 'Pedido no encontrado');
+
+  if (!pedido) {
+    throw new HttpError(404, 'Pedido no encontrado');
+  }
+
   return pedido;
 }
 
-export async function asignarEnvio(
-  pedidoId: number,
-  repartidorId: number,
-  costo: number
-): Promise<Pedido> {
+export async function asignarEnvio(pedidoId: number, repartidorId: number, costo: number): Promise<Pedido> {
   const pedido = await repository.findOne(pedidoId);
 
   if (!pedido) {
@@ -89,15 +99,15 @@ export async function asignarEnvio(
   }
 
   if (pedido.retiro) {
-    throw new HttpError(400,'No se puede asignar un envío a un pedido con retiro en el local');
+    throw new HttpError(400, 'No se puede asignar un envío a un pedido con retiro en el local');
   }
 
   if (pedido.estado === 'Cancelado' || pedido.estado === 'Entregado') {
-    throw new HttpError(400,`No se puede asignar un envío a un pedido ${pedido.estado.toLowerCase()}`);
+    throw new HttpError(400, `No se puede asignar un envío a un pedido ${pedido.estado.toLowerCase()}`);
   }
 
   if (pedido.envio) {
-    throw new HttpError(409,'El pedido ya tiene un envío asignado');
+    throw new HttpError(409, 'El pedido ya tiene un envío asignado');
   }
 
   const repartidor = await repartidorRepository.findOne(repartidorId);
@@ -107,12 +117,12 @@ export async function asignarEnvio(
   }
 
   if (!repartidor.estado) {
-    throw new HttpError(400,'El repartidor seleccionado no está activo');
+    throw new HttpError(400, 'El repartidor seleccionado no está activo');
   }
 
-  await envioRepository.add({costo,monto_propina: 0,pedido,} as any);
+  await envioRepository.add({ costo, monto_propina: 0, pedido } as any);
 
-  const actualizado = await repository.update(pedidoId, {repartidor,estado: 'En camino',});
+  const actualizado = await repository.update(pedidoId, { repartidor, estado: 'En camino' });
 
   if (!actualizado) {
     throw new HttpError(404, 'Pedido no encontrado');
@@ -120,28 +130,17 @@ export async function asignarEnvio(
 
   const pedidoCompleto = await repository.findOne(pedidoId);
 
-  if (!pedidoCompleto) { throw new HttpError(404, 'Pedido no encontrado');
+  if (!pedidoCompleto) {
+    throw new HttpError(404, 'Pedido no encontrado');
   }
 
   return pedidoCompleto;
 }
 
 export async function eliminarPedido(id: number): Promise<void> {
-  const pedido = await repository.findOne(id);
-  if (!pedido) throw new HttpError(404, 'Pedido no encontrado');
+  const pedido = await repository.cancelarConReposicion(id);
 
-  // Cascade manual: primero los detalles (ítems), después el envío si existe
-  const detalles = await detallePedidoRepository.findByPedido(id);
-  for (const detalle of detalles) {
-    await detallePedidoRepository.delete(id, detalle.pizza.id);
+  if (!pedido) {
+    throw new HttpError(404, 'Pedido no encontrado');
   }
-
-  const envios = await envioRepository.findAll();
-  const envioDelPedido = envios.find((e) => e.pedido.id === id);
-  if (envioDelPedido) {
-    await envioRepository.delete(envioDelPedido.id);
-  }
-
-  const eliminado = await repository.delete(id);
-  if (!eliminado) throw new HttpError(404, 'Pedido no encontrado');
 }

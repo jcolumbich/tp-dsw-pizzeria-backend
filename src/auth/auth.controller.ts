@@ -11,3 +11,12 @@ export async function login(req: Request, res: Response) {
     return handleError(res, error);
   }
 }
+
+export async function registrar(req: Request, res: Response) {
+  try {
+    const cliente = await service.registrarCliente(req.body);
+    return res.status(201).json({ message: 'Cliente registrado correctamente', data: cliente });
+  } catch (error) {
+    return handleError(res, error);
+  }
+}
