@@ -89,11 +89,10 @@ export async function update(req: Request, res: Response) {
     if (isNaN(id)) {
       return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
     }
+    
 
-    delete req.body.pedidoInput.items;
-    delete req.body.pedidoInput.clienteId;
 
-    const pedido = await service.actualizarPedido(id, req.body.pedidoInput);
+    const pedido = await service.actualizarPedido(id, { estado: req.body.pedidoInput.estado });
     return res.status(200).json({ message: 'Pedido actualizado', data: pedido });
   } catch (error) {
     return handleError(res, error);

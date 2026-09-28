@@ -47,13 +47,7 @@ const dinero: Validador = (valor) =>
 const nivelPermisos: Validador = (valor) =>
   valor === 0 || valor === 1;
 
-const estadosPedido = [
-  'Pendiente',
-  'En preparación',
-  'En camino',
-  'Entregado',
-  'Cancelado',
-];
+const estadosPedido = ['Pendiente', 'En preparación', 'En camino', 'Cancelado'];
 
 const estadoPedido: Validador = (valor) =>
   typeof valor === 'string' && estadosPedido.includes(valor);
@@ -180,11 +174,9 @@ function esquemaPara(req: Request): Esquema | undefined {
     };
   }
 
-  if (/^\/pedidos\/[^/]+$/.test(ruta) && metodo === 'PUT') {
-    return {
-      campos: { retiro: booleano, estado: estadoPedido },
-    };
-  }
+ if (/^\/pedidos\/[^/]+$/.test(ruta) && metodo === 'PUT') {
+  return { campos: { estado: estadoPedido }, obligatorios: ['estado'] };
+  }    
 
   if (ruta === '/pizzas' && metodo === 'POST') {
     return {

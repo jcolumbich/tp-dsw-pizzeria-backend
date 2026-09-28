@@ -20,7 +20,9 @@ import { handleError } from './shared/handle-error.js';
 
 const app = express();
 
-app.use(cors());
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+app.use(cors({ origin: frontendUrl, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],allowedHeaders: ['Content-Type', 'Authorization'],}));
 app.use(express.json());
 
 await syncSchema();

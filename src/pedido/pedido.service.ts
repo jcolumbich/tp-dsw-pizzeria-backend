@@ -59,35 +59,27 @@ export async function crearPedido(retiro: unknown, clienteId: unknown, items: un
 
 export async function actualizarPedido(id: number, datos: Partial<{ retiro: boolean; estado: string }>): Promise<Pedido> {
   const pedidoActual = await repository.findOne(id);
-
-  if (!pedidoActual) {
-    throw new HttpError(404, 'Pedido no encontrado');
-  }
+  if (!pedidoActual) throw new HttpError(404, 'Pedido no encontrado');
+  if (datos.retiro !== undefined || !datos.estado) throw new HttpError(400, 'Solo se puede actualizar el estado del pedido');
+  if (pedidoActual.estado === 'Entregado') throw new HttpError(409, 'No se puede modificar un pedido entregado anteriormente');
 
   if (pedidoActual.estado === 'Cancelado') {
-    if (datos.estado === 'Cancelado') {
-      return pedidoActual;
-    }
-
+    if (datos.estado === 'Cancelado') return pedidoActual;
     throw new HttpError(409, 'Un pedido cancelado no puede volver a modificarse');
   }
 
   if (datos.estado === 'Cancelado') {
     const pedidoCancelado = await repository.cancelarConReposicion(id);
-
-    if (!pedidoCancelado) {
-      throw new HttpError(404, 'Pedido no encontrado');
-    }
-
+    if (!pedidoCancelado) throw new HttpError(404, 'Pedido no encontrado');
     return pedidoCancelado;
   }
 
-  const pedido = await repository.update(id, datos);
-
-  if (!pedido) {
-    throw new HttpError(404, 'Pedido no encontrado');
+  if (pedidoActual.estado !== 'Pendiente' || datos.estado !== 'En preparación') {
+    throw new HttpError(409, 'Solo se puede confirmar un pedido pendiente');
   }
 
+  const pedido = await repository.update(id, { estado: 'En preparación' });
+  if (!pedido) throw new HttpError(404, 'Pedido no encontrado');
   return pedido;
 }
 
@@ -102,9 +94,9 @@ export async function asignarEnvio(pedidoId: number, repartidorId: number, costo
     throw new HttpError(400, 'No se puede asignar un envío a un pedido con retiro en el local');
   }
 
-  if (pedido.estado === 'Cancelado' || pedido.estado === 'Entregado') {
-    throw new HttpError(400, `No se puede asignar un envío a un pedido ${pedido.estado.toLowerCase()}`);
-  }
+  if (pedido.estado !== 'En preparación') {
+  throw new HttpError(409, 'Confirmá el pedido antes de asignar el envío');
+ }
 
   if (pedido.envio) {
     throw new HttpError(409, 'El pedido ya tiene un envío asignado');

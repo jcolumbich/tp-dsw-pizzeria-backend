@@ -277,9 +277,10 @@ export class PedidoRepository implements Repository<Pedido> {
       ingrediente.stock += cantidadAReponer;
     }
 
-    pedido.estado = 'Cancelado';
+     pedido.estado = 'Cancelado';
+     pedido.repartidor = undefined;
 
-    await em.flush();
+     await em.flush();
 
     return pedido;
   });
