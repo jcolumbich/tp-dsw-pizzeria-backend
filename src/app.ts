@@ -15,7 +15,7 @@ import { authRouter } from './auth/auth.routes.js';
 import { verificarToken, requiereNivel } from './auth/auth.middleware.js';
 
 
-const app = express();
+export const app = express();
 app.use(cors());
 app.use(express.json()); // Middleware para parsear JSONs en el body
 
@@ -60,6 +60,11 @@ app.use((_, res) => {
   return res.status(404).json({ message: 'Recurso no encontrado' });
 });
 
-app.listen(3000, () => {
-  console.log('Servidor corriendo con éxito en http://localhost:3000');
-});
+// Vitest define automáticamente process.env.VITEST=true en el proceso de test.
+// Evitamos levantar un puerto real cuando el módulo se importa desde un test
+// (por ejemplo, con supertest), sin afectar el arranque normal del servidor.
+if (!process.env.VITEST) {
+  app.listen(3000, () => {
+    console.log('Servidor corriendo con éxito en http://localhost:3000');
+  });
+}

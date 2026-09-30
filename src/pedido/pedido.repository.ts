@@ -5,6 +5,7 @@ import { Pizza } from '../pizza/pizza.entity.js';
 import { Cliente } from '../cliente/cliente.entity.js';
 import { DetallePedido } from '../detalle-pedido/detalle-pedido.entity.js';
 import { Repository } from '../shared/repository.js';
+import { calcularTotalPedido } from './pedido.logic.js';
 
 export interface ItemPedidoInput {
   pizza: Pizza;
@@ -40,13 +41,13 @@ async findAll(estado?: string, clienteId?: number): Promise<Pedido[]> {
       total: 0,
     });
 
-    let total = 0;
     for (const { pizza, cantidad } of items) {
       const detalleData = { pedido, pizza, cantidad } as Omit<RequiredEntityData<DetallePedido>, 'subtotal'>;
       orm.em.create(DetallePedido, detalleData as RequiredEntityData<DetallePedido>);
-      total += cantidad * pizza.precio;
     }
-    pedido.total = total;
+    pedido.total = calcularTotalPedido(
+      items.map(({ pizza, cantidad }) => ({ cantidad, precioUnitario: pizza.precio }))
+    );
 
     await orm.em.flush();
     return pedido;
@@ -59,11 +60,12 @@ async findAll(estado?: string, clienteId?: number): Promise<Pedido[]> {
     const pedido = await orm.em.findOne(Pedido, { id }, { populate: ['detalles', 'detalles.pizza'] });
     if (!pedido) return null;
 
-    let total = 0;
-    for (const detalle of pedido.detalles) {
-      total += detalle.cantidad * detalle.pizza.precio;
-    }
-    pedido.total = total;
+    pedido.total = calcularTotalPedido(
+      pedido.detalles.getItems().map((detalle) => ({
+        cantidad: detalle.cantidad,
+        precioUnitario: detalle.pizza.precio,
+      }))
+    );
 
     await orm.em.flush();
     return pedido;

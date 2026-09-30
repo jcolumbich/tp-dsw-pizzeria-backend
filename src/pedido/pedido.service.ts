@@ -6,6 +6,7 @@ import { DetallePedidoRepository } from '../detalle-pedido/detalle-pedido.reposi
 import { RepartidorRepository } from '../repartidor/repartidor.repository.js';
 import { EnvioRepository } from '../envio/envio.repository.js';
 import { HttpError } from '../shared/http-error.js';
+import { validarPizzaDisponible } from './pedido.logic.js';
 
 const repository = new PedidoRepository();
 const pizzaRepository = new PizzaRepository();
@@ -59,9 +60,7 @@ export async function crearPedido(retiro: unknown, clienteId: unknown, items: un
     if (!pizza) {
       throw new HttpError(404, `No existe una pizza con id ${item.pizzaId}`);
     }
-    if (!pizza.disponible) {
-      throw new HttpError(400, `La pizza "${pizza.nombre}" no está disponible`);
-    }
+    validarPizzaDisponible(pizza);
     itemsConPizza.push({ pizza, cantidad: item.cantidad });
   }
 
