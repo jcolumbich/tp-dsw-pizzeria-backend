@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { ClienteRepository } from '../cliente/cliente.repository.js';
+import { crearCliente } from '../cliente/cliente.service.js';
 import { HttpError } from '../shared/http-error.js';
 
 const clienteRepository = new ClienteRepository();
@@ -13,6 +14,36 @@ interface ResultadoLogin {
     apellido: string;
     email: string;
     nivel_permisos: number;
+  };
+}
+
+function generarToken(cliente: {
+  id: number;
+  nombre: string;
+  apellido: string;
+  email: string;
+  nivel_permisos: number;
+}): ResultadoLogin {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new HttpError(500, 'JWT_SECRET no está configurado en el servidor');
+  }
+
+  const token = jwt.sign(
+    { id: cliente.id, email: cliente.email, nivel_permisos: cliente.nivel_permisos },
+    secret,
+    { expiresIn: '2h' }
+  );
+
+  return {
+    token,
+    usuario: {
+      id: cliente.id,
+      nombre: cliente.nombre,
+      apellido: cliente.apellido,
+      email: cliente.email,
+      nivel_permisos: cliente.nivel_permisos,
+    },
   };
 }
 
@@ -38,25 +69,21 @@ export async function login(email: string, contraseniaPlana: string): Promise<Re
     throw new HttpError(403, 'Este usuario está suspendido');
   }
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new HttpError(500, 'JWT_SECRET no está configurado en el servidor');
-  }
+  return generarToken(cliente);
+}
 
-  const token = jwt.sign(
-    { id: cliente.id, email: cliente.email, nivel_permisos: cliente.nivel_permisos },
-    secret,
-    { expiresIn: '2h' }
-  );
+export async function register(datos: any): Promise<ResultadoLogin> {
+  const { nombre, apellido, email, contrasenia, domicilio } = datos;
 
-  return {
-    token,
-    usuario: {
-      id: cliente.id,
-      nombre: cliente.nombre,
-      apellido: cliente.apellido,
-      email: cliente.email,
-      nivel_permisos: cliente.nivel_permisos,
-    },
-  };
+  const cliente = await crearCliente({
+    nombre,
+    apellido,
+    email,
+    contrasenia,
+    domicilio,
+    nivel_permisos: 0,
+    estado: true,
+  });
+
+  return generarToken(cliente);
 }
