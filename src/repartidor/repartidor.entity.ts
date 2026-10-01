@@ -7,13 +7,12 @@ import { Pedido } from '../pedido/pedido.entity.js';
 export class Repartidor extends Persona {
 
     
-    @Property({ type: 'string' })
-    matricula!: string;
-    
+  @Property({ type: 'string', unique: true })
+  matricula!: string;
 
-    @Property({ type: 'double' })
-    monto_propina_total!: number; //cambiar esto, no es estrictamente necesario//
+  @Property({ type: 'double' })
+  monto_propina_total!: number;
 
-    @OneToMany(() => Pedido, (pedido) => pedido.repartidor)
-    pedidos = new Collection<Pedido>(this);
+  @OneToMany(() => Pedido, (pedido) => pedido.repartidor)
+  pedidos = new Collection<Pedido>(this);
 }

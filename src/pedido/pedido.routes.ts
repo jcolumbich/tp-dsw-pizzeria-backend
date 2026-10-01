@@ -10,7 +10,10 @@ pedidoRouter.get('/', findAll);
 
 pedidoRouter.get('/:id', findOne);
 
-pedidoRouter.post('/',sanitizePedidoInput,add);
+pedidoRouter.post('/', (req, res, next) => {
+  if (req.usuario?.nivel_permisos !== 0) return res.status(403).json({ message: 'Solo los clientes pueden crear pedidos' });
+  next();
+}, sanitizePedidoInput, add);
 
 // Asignar envío y repartidor
 pedidoRouter.post('/:id/asignar-envio', requiereNivel(1), asignarEnvio);
