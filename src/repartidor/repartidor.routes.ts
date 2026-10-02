@@ -1,11 +1,13 @@
 import { Router } from 'express';
-import { sanitizeRepartidorInput, findAll, findOne, add, update, remove } from './repartidor.controller.js';
+import { findAll, findOne, add, update, remove } from './repartidor.controller.js';
+import { validarConSchema } from '../shared/validar-schema.js';
+import { crearRepartidorSchema, actualizarRepartidorSchema } from './repartidor.schema';
 
 export const repartidorRouter = Router();
 
 repartidorRouter.get('/', findAll);
 repartidorRouter.get('/:id', findOne);
-repartidorRouter.post('/', sanitizeRepartidorInput, add);
-repartidorRouter.put('/:id', sanitizeRepartidorInput, update);
-repartidorRouter.patch('/:id', sanitizeRepartidorInput, update);
+repartidorRouter.post('/', validarConSchema(crearRepartidorSchema, 'repartidorInput'), add);
+repartidorRouter.put('/:id', validarConSchema(actualizarRepartidorSchema, 'repartidorInput'), update);
+repartidorRouter.patch('/:id', validarConSchema(actualizarRepartidorSchema, 'repartidorInput'), update);
 repartidorRouter.delete('/:id', remove);

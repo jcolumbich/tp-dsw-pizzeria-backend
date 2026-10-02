@@ -4,7 +4,6 @@ import cors from 'cors';
 import { RequestContext } from '@mikro-orm/core';
 
 import { orm, syncSchema } from './shared/db/orm.js';
-import { validarEntrada } from './shared/validar_entradas.js';
 
 import { ingredienteRouter } from './ingrediente/ingrediente.routes.js';
 import { pizzaRouter } from './pizza/pizza.routes.js';
@@ -30,9 +29,6 @@ await syncSchema();
 app.use((req, res, next) => {
   RequestContext.create(orm.em, next);
 });
-
-// Debe ejecutarse ANTES de las rutas /api.
-app.use('/api', validarEntrada);
 
 // Login público
 app.use('/api/auth', authRouter);

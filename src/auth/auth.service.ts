@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { ClienteRepository } from '../cliente/cliente.repository.js';
 import { crearCliente } from '../cliente/cliente.service.js';
 import { HttpError } from '../shared/http-error.js';
+import { loginSchema, registerSchema } from './auth.schema.js';
 
 const clienteRepository = new ClienteRepository();
 
@@ -25,9 +26,7 @@ function generarToken(cliente: {
   nivel_permisos: number;
 }): ResultadoLogin {
   const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new HttpError(500, 'JWT_SECRET no está configurado en el servidor');
-  }
+  if (!secret) throw new HttpError(500, 'JWT_SECRET no está configurado en el servidor');
 
   const token = jwt.sign(
     { id: cliente.id, email: cliente.email, nivel_permisos: cliente.nivel_permisos },
@@ -48,73 +47,39 @@ function generarToken(cliente: {
 }
 
 export async function login(email: string, contraseniaPlana: string): Promise<ResultadoLogin> {
-  if (!email || !contraseniaPlana) {
-    throw new HttpError(400, 'Email y contraseña son requeridos');
+  const resultado = loginSchema.safeParse({ email, contrasenia: contraseniaPlana });
+  if (!resultado.success) {
+    throw new HttpError(400, resultado.error.issues[0]?.message ?? 'Datos inválidos');
   }
+  const datos = resultado.data;
 
-  const clientes = await clienteRepository.findAll();
-  const cliente = clientes.find((c) => c.email === email);
+  const cliente = await clienteRepository.findByEmail(datos.email);
+  if (!cliente) throw new HttpError(401, 'Credenciales inválidas');
 
-  // Mensaje genérico a propósito: no confirmamos si el email existe o no.
-  if (!cliente) {
-    throw new HttpError(401, 'Credenciales inválidas');
-  }
+  const coincide = await bcrypt.compare(datos.contrasenia, cliente.contrasenia);
+  if (!coincide) throw new HttpError(401, 'Credenciales inválidas');
 
-  const coincide = await bcrypt.compare(contraseniaPlana, cliente.contrasenia);
-  if (!coincide) {
-    throw new HttpError(401, 'Credenciales inválidas');
-  }
-
-  if (!cliente.estado) {
-    throw new HttpError(403, 'Este usuario está suspendido');
-  }
+  if (!cliente.estado) throw new HttpError(403, 'Este usuario está suspendido');
 
   return generarToken(cliente);
 }
 
-export async function register(datos: unknown): Promise<ResultadoLogin> {
-  if (!datos || typeof datos !== 'object' || Array.isArray(datos)) {
-    throw new HttpError(400, 'Los datos del cliente son inválidos');
+export async function register(entrada: unknown): Promise<ResultadoLogin> {
+  const resultado = registerSchema.safeParse(entrada);
+  if (!resultado.success) {
+    throw new HttpError(400, resultado.error.issues[0]?.message ?? 'Datos inválidos');
   }
+  const datos = resultado.data;
 
-  const entrada = datos as Record<string, unknown>;
-  const { nombre, apellido, email, contrasenia, domicilio } = entrada;
-
-  if (typeof nombre !== 'string' || !nombre.trim()) {
-    throw new HttpError(400, 'El nombre es requerido');
-  }
-
-  if (typeof apellido !== 'string' || !apellido.trim()) {
-    throw new HttpError(400, 'El apellido es requerido');
-  }
-
-  if (typeof email !== 'string' || !email.trim()) {
-    throw new HttpError(400, 'El email es requerido');
-  }
-
-  const emailNormalizado = email.trim().toLowerCase();
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNormalizado)) {
-    throw new HttpError(400, 'El formato del email no es válido');
-  }
-
-  if (typeof contrasenia !== 'string' || contrasenia.length < 6) {
-    throw new HttpError(400, 'La contraseña debe tener al menos 6 caracteres');
-  }
-
-  if (typeof domicilio !== 'string' || !domicilio.trim()) {
-    throw new HttpError(400, 'El domicilio es requerido');
-  }
-
-  const cliente = await crearCliente({
-    nombre: nombre.trim(),
-    apellido: apellido.trim(),
-    email: emailNormalizado,
-    contrasenia,
-    domicilio: domicilio.trim(),
+    const cliente = await crearCliente({
+    nombre: datos.nombre,
+    apellido: datos.apellido,
+    email: datos.email,
+    contrasenia: datos.contrasenia,
+    domicilio: datos.domicilio,
     nivel_permisos: 0,
     estado: true,
-  });
+  }, true);
 
   return generarToken(cliente);
 }

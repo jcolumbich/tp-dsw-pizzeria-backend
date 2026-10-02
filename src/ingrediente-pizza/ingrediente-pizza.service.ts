@@ -3,6 +3,7 @@ import { IngredientePizzaRepository } from './ingrediente-pizza.repository.js';
 import { PizzaRepository } from '../pizza/pizza.repository.js';
 import { IngredienteRepository } from '../ingrediente/ingrediente.repository.js';
 import { HttpError } from '../shared/http-error.js';
+import type { CrearIngredientePizzaInput } from './ingrediente-pizza.schema.js';
 
 const repository = new IngredientePizzaRepository();
 const pizzaRepository = new PizzaRepository();
@@ -24,18 +25,8 @@ export async function listarPorPizza(pizzaId: number): Promise<IngredientePizza[
   return repository.findByPizza(pizzaId);
 }
 
-export async function crear(datos: any): Promise<IngredientePizza> {
+export async function crear(datos: CrearIngredientePizzaInput): Promise<IngredientePizza> {
   const { cantidad, pizzaId, ingredienteId } = datos;
-
-  if (cantidad === undefined || typeof cantidad !== 'number' || cantidad <= 0) {
-    throw new HttpError(400, 'La cantidad es requerida y debe ser un número mayor a 0');
-  }
-  if (pizzaId === undefined || typeof pizzaId !== 'number') {
-    throw new HttpError(400, 'pizzaId es requerido y debe ser un número');
-  }
-  if (ingredienteId === undefined || typeof ingredienteId !== 'number') {
-    throw new HttpError(400, 'ingredienteId es requerido y debe ser un número');
-  }
 
   const pizza = await pizzaRepository.findOne(pizzaId);
   if (!pizza) throw new HttpError(404, `No existe una pizza con id ${pizzaId}`);
@@ -51,11 +42,7 @@ export async function crear(datos: any): Promise<IngredientePizza> {
   return repository.add({ cantidad, pizza, ingrediente });
 }
 
-export async function actualizar(pizzaId: number, ingredienteId: number, cantidad: unknown): Promise<IngredientePizza> {
-  if (cantidad === undefined || typeof cantidad !== 'number' || cantidad <= 0) {
-    throw new HttpError(400, 'La cantidad es requerida y debe ser un número mayor a 0');
-  }
-
+export async function actualizar(pizzaId: number, ingredienteId: number, cantidad: number): Promise<IngredientePizza> {
   const data = await repository.update(pizzaId, ingredienteId, { cantidad });
   if (!data) throw new HttpError(404, 'Registro no encontrado');
   return data;

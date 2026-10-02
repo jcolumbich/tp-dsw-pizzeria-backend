@@ -1,53 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import * as service from './repartidor.service.js';
 import { handleError } from '../shared/handle-error.js';
-
-export function sanitizeRepartidorInput(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
-    return res.status(400).json({
-      message: 'El cuerpo de la petición debe ser un objeto',
-    });
-  }
-
-  const esActualizacion = req.method === 'PUT' || req.method === 'PATCH';
-
-  if (
-  esActualizacion &&
-  (
-    Object.prototype.hasOwnProperty.call(req.body, 'nivel_permisos') ||
-    Object.prototype.hasOwnProperty.call(req.body, 'monto_propina_total')
-  )
- ) {
-  return res.status(400).json({
-    message: 'La actualización contiene campos no permitidos',
-  });
-  }
-
-  req.body.repartidorInput = {
-    nombre: req.body.nombre,
-    apellido: req.body.apellido,
-    email: req.body.email,
-    contrasenia: req.body.contrasenia,
-    nivel_permisos: esActualizacion ? undefined : req.body.nivel_permisos,
-    estado: req.body.estado,
-    matricula: req.body.matricula,
-    monto_propina_total: esActualizacion
-      ? undefined
-      : req.body.monto_propina_total,
-  };
-
-  Object.keys(req.body.repartidorInput).forEach((key) => {
-    if (req.body.repartidorInput[key] === undefined) {
-      delete req.body.repartidorInput[key];
-    }
-  });
-
-  next();
-}
 
 export async function findAll(req: Request, res: Response) {
   try {
@@ -61,10 +14,9 @@ export async function findAll(req: Request, res: Response) {
 export async function findOne(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'El ID provisto debe ser un número entero positivo válido' });
     }
-
     const repartidor = await service.buscarRepartidor(id);
     return res.status(200).json({ data: repartidor });
   } catch (error) {
@@ -84,10 +36,9 @@ export async function add(req: Request, res: Response) {
 export async function update(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'El ID provisto debe ser un número entero positivo válido' });
     }
-
     const repartidor = await service.actualizarRepartidor(id, req.body.repartidorInput);
     return res.status(200).json({ message: 'Repartidor actualizado', data: repartidor });
   } catch (error) {
@@ -98,10 +49,9 @@ export async function update(req: Request, res: Response) {
 export async function remove(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'El ID provisto debe ser un número entero positivo válido' });
     }
-
     await service.eliminarRepartidor(id);
     return res.status(200).json({ message: 'Repartidor eliminado exitosamente' });
   } catch (error) {

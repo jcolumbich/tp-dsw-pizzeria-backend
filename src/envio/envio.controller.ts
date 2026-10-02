@@ -1,26 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import * as service from './envio.service.js';
 import { handleError } from '../shared/handle-error.js';
-
-export function sanitizeEnvioInput(req: Request, res: Response, next: NextFunction) {
-  if (!req.body) {
-    return res.status(400).json({ message: 'El cuerpo de la petición es requerido' });
-  }
-
-  req.body.envioInput = {
-    costo: req.body.costo,
-    monto_propina: req.body.monto_propina,
-    pedido: req.body.pedidoId,
-  };
-
-  Object.keys(req.body.envioInput).forEach((key) => {
-    if (req.body.envioInput[key] === undefined) {
-      delete req.body.envioInput[key];
-    }
-  });
-
-  next();
-}
 
 export async function findAll(req: Request, res: Response) {
   try {
@@ -34,10 +14,9 @@ export async function findAll(req: Request, res: Response) {
 export async function findOne(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'El ID provisto debe ser un número entero positivo válido' });
     }
-
     const envio = await service.buscarEnvio(id);
     return res.status(200).json({ data: envio });
   } catch (error) {
@@ -57,10 +36,9 @@ export async function add(req: Request, res: Response) {
 export async function update(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'El ID provisto debe ser un número entero positivo válido' });
     }
-
     const envio = await service.actualizarEnvio(id, req.body.envioInput);
     return res.status(200).json({ message: 'Envío actualizado', data: envio });
   } catch (error) {
@@ -71,10 +49,9 @@ export async function update(req: Request, res: Response) {
 export async function remove(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'El ID provisto debe ser un número entero válido' });
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'El ID provisto debe ser un número entero positivo válido' });
     }
-
     await service.eliminarEnvio(id);
     return res.status(200).json({ message: 'Envío eliminado exitosamente' });
   } catch (error) {

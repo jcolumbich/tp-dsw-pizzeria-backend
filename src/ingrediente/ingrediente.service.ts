@@ -14,32 +14,21 @@ export async function buscarIngrediente(id: number): Promise<Ingrediente> {
   return ingrediente;
 }
 
-export async function crearIngrediente(datos: any): Promise<Ingrediente> {
-  const { nombre, stock } = datos;
+export async function crearIngrediente(
+  datos: { nombre: string; stock: number }
+): Promise<Ingrediente> {
+  const ingrediente = new Ingrediente();
 
-  if (!nombre || typeof nombre !== 'string' || nombre.trim() === '') {
-    throw new HttpError(400, 'El nombre es requerido y debe ser un texto válido');
-  }
-  if (stock === undefined || typeof stock !== 'number' || stock < 0) {
-    throw new HttpError(400, 'El stock es requerido y debe ser un número mayor o igual a 0');
-  }
+  ingrediente.nombre = datos.nombre;
+  ingrediente.stock = datos.stock;
 
-  return repository.add(datos);
+  return repository.add(ingrediente);
 }
 
-export async function actualizarIngrediente(id: number, datos: any): Promise<Ingrediente> {
-  const { nombre, stock } = datos;
-
-  if (Object.keys(datos).length === 0) {
-    throw new HttpError(400, 'Debe enviar al menos un campo para actualizar');
-  }
-  if (nombre !== undefined && (typeof nombre !== 'string' || nombre.trim() === '')) {
-    throw new HttpError(400, 'El nombre debe ser un texto válido');
-  }
-  if (stock !== undefined && (typeof stock !== 'number' || stock < 0)) {
-    throw new HttpError(400, 'El stock debe ser un número mayor o igual a 0');
-  }
-
+export async function actualizarIngrediente(
+  id: number,
+  datos: Partial<{ nombre: string; stock: number }>
+): Promise<Ingrediente> {
   const ingrediente = await repository.update(id, datos);
   if (!ingrediente) throw new HttpError(404, 'Ingrediente no encontrado');
   return ingrediente;

@@ -3,6 +3,7 @@ import { Cliente } from './cliente.entity.js';
 import { ClienteRepository } from './cliente.repository.js';
 import { RepartidorRepository } from '../repartidor/repartidor.repository.js';
 import { HttpError } from '../shared/http-error.js';
+import { crearClienteSchema, crearClienteDesdeRegistroSchema, actualizarClienteSchema } from './cliente.schema.js';
 
 const repository = new ClienteRepository();
 const repartidorRepository = new RepartidorRepository();
@@ -17,116 +18,64 @@ export async function buscarCliente(id: number): Promise<Cliente> {
   return cliente;
 }
 
-export async function crearCliente(datos: any): Promise<Cliente> {
-  const { nombre, apellido, email, contrasenia, nivel_permisos, estado, domicilio } = datos;
-
-  if (!nombre || typeof nombre !== 'string') {
-    throw new HttpError(400, 'El nombre es requerido y debe ser texto');
+export async function crearCliente(entrada: unknown, desdeRegistro = false): Promise<Cliente> {
+  const schema = desdeRegistro ? crearClienteDesdeRegistroSchema : crearClienteSchema;
+  const resultado = schema.safeParse(entrada);
+  if (!resultado.success) {
+    throw new HttpError(400, resultado.error.issues[0]?.message ?? 'Datos inválidos');
   }
+  const datos = resultado.data;
 
-  if (!apellido || typeof apellido !== 'string') {
-    throw new HttpError(400, 'El apellido es requerido y debe ser texto');
-  }
-
-  if (!email || typeof email !== 'string') {
-    throw new HttpError(400, 'El email es requerido y debe ser texto');
-  }
-
-  if (!contrasenia || typeof contrasenia !== 'string') {
-    throw new HttpError(400, 'La contraseña es requerida y debe ser texto');
-  }
-
-  if (nivel_permisos === undefined || typeof nivel_permisos !== 'number') {
-    throw new HttpError(400, 'nivel_permisos es requerido y debe ser un número');
-  }
-
-  if (estado === undefined || typeof estado !== 'boolean') {
-    throw new HttpError(400, 'estado es requerido y debe ser booleano');
-  }
-
-  if (!domicilio || typeof domicilio !== 'string') {
-    throw new HttpError(400, 'El domicilio es requerido y debe ser texto');
-  }
-
-  const emailNormalizado = email.trim().toLowerCase();
-  const clienteExistente = await repository.findByEmail(emailNormalizado);
-  const repartidorExistente = await repartidorRepository.findByEmail(emailNormalizado);
-
+  const clienteExistente = await repository.findByEmail(datos.email);
+  const repartidorExistente = await repartidorRepository.findByEmail(datos.email);
   if (clienteExistente || repartidorExistente) {
     throw new HttpError(409, 'Ya existe un usuario registrado con ese email');
   }
 
-  const contraseniaHasheada = await bcrypt.hash(contrasenia, 10);
+  const cliente = new Cliente();
+  cliente.nombre = datos.nombre;
+  cliente.apellido = datos.apellido;
+  cliente.email = datos.email;
+  cliente.contrasenia = await bcrypt.hash(datos.contrasenia, 10);
+  cliente.nivel_permisos = datos.nivel_permisos;
+  cliente.estado = datos.estado;
+  cliente.domicilio = datos.domicilio;
 
-  return repository.add({
-    ...datos,
-    nombre: nombre.trim(),
-    apellido: apellido.trim(),
-    email: emailNormalizado,
-    contrasenia: contraseniaHasheada,
-    domicilio: domicilio.trim(),
-  });
+  return repository.add(cliente);
 }
 
-export async function actualizarCliente(id: number, datos: any): Promise<Cliente> {
-  if (Object.keys(datos).length === 0) {
-    throw new HttpError(400, 'Debe enviar al menos un campo para actualizar');
+export async function actualizarCliente(id: number, entrada: unknown): Promise<Cliente> {
+  const resultado = actualizarClienteSchema.safeParse(entrada);
+  if (!resultado.success) {
+    throw new HttpError(400, resultado.error.issues[0]?.message ?? 'Datos inválidos');
   }
 
-  if (datos.nombre !== undefined) {
-    if (typeof datos.nombre !== 'string' || !datos.nombre.trim()) {
-      throw new HttpError(400, 'El nombre debe ser un texto válido');
-    }
+  const actual = await repository.findOne(id);
+  if (!actual) throw new HttpError(404, 'Cliente no encontrado');
 
-    datos.nombre = datos.nombre.trim();
-  }
+  const datos = resultado.data;
+  const cambios: Partial<Cliente> = {};
 
-  if (datos.apellido !== undefined) {
-    if (typeof datos.apellido !== 'string' || !datos.apellido.trim()) {
-      throw new HttpError(400, 'El apellido debe ser un texto válido');
-    }
-
-    datos.apellido = datos.apellido.trim();
-  }
-
-  if (datos.domicilio !== undefined) {
-    if (typeof datos.domicilio !== 'string' || !datos.domicilio.trim()) {
-      throw new HttpError(400, 'El domicilio debe ser un texto válido');
-    }
-
-    datos.domicilio = datos.domicilio.trim();
-  }
+  if (datos.nombre !== undefined) cambios.nombre = datos.nombre;
+  if (datos.apellido !== undefined) cambios.apellido = datos.apellido;
+  if (datos.domicilio !== undefined) cambios.domicilio = datos.domicilio;
+  if (datos.estado !== undefined) cambios.estado = datos.estado;
 
   if (datos.email !== undefined) {
-    if (typeof datos.email !== 'string' || !datos.email.trim()) {
-      throw new HttpError(400, 'El email debe ser un texto válido');
-    }
-
-    const emailNormalizado = datos.email.trim().toLowerCase();
-    const clienteExistente = await repository.findByEmail(emailNormalizado);
-    const repartidorExistente = await repartidorRepository.findByEmail(emailNormalizado);
-
+    const clienteExistente = await repository.findByEmail(datos.email);
+    const repartidorExistente = await repartidorRepository.findByEmail(datos.email);
     if ((clienteExistente && clienteExistente.id !== id) || repartidorExistente) {
       throw new HttpError(409, 'Ya existe un usuario registrado con ese email');
     }
-
-    datos.email = emailNormalizado;
+    cambios.email = datos.email;
   }
 
   if (datos.contrasenia !== undefined) {
-    if (typeof datos.contrasenia !== 'string' || !datos.contrasenia.trim()) {
-      throw new HttpError(400, 'La contraseña debe ser un texto válido');
-    }
-
-    datos.contrasenia = await bcrypt.hash(datos.contrasenia.trim(), 10);
+    cambios.contrasenia = await bcrypt.hash(datos.contrasenia, 10);
   }
 
-  const cliente = await repository.update(id, datos);
-
-  if (!cliente) {
-    throw new HttpError(404, 'Cliente no encontrado');
-  }
-
+  const cliente = await repository.update(id, cambios);
+  if (!cliente) throw new HttpError(404, 'Cliente no encontrado');
   return cliente;
 }
 

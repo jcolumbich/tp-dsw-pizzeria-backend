@@ -4,7 +4,7 @@ import { handleError } from '../shared/handle-error.js';
 
 export async function login(req: Request, res: Response) {
   try {
-    const { email, contrasenia } = req.body;
+    const { email, contrasenia } = req.body.loginInput;
     const resultado = await service.login(email, contrasenia);
     return res.status(200).json({ message: 'Login exitoso', data: resultado });
   } catch (error) {
@@ -14,7 +14,7 @@ export async function login(req: Request, res: Response) {
 
 export async function register(req: Request, res: Response) {
   try {
-    const resultado = await service.register(req.body);
+    const resultado = await service.register(req.body.registerInput);
     return res.status(201).json({ message: 'Registro exitoso', data: resultado });
   } catch (error) {
     return handleError(res, error);
