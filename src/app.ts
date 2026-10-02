@@ -53,11 +53,9 @@ app.use((error: unknown,_req: express.Request,res: express.Response,next: expres
 app.use((_, res) => {
   return res.status(404).json({ message: 'Recurso no encontrado' });
 });
-
-// Vitest define automáticamente process.env.VITEST=true en el proceso de test.
-// Evitamos levantar un puerto real cuando el módulo se importa desde un test
-// (por ejemplo, con supertest), sin afectar el arranque normal del servidor.
-if (!process.env.VITEST) {
+// Jest establece JEST_WORKER_ID durante los tests.
+// Supertest utiliza app directamente, sin iniciar el servidor en el puerto 3000.
+if (process.env.JEST_WORKER_ID === undefined) {
   app.listen(3000, () => {
     console.log('Servidor corriendo con éxito en http://localhost:3000');
   });
