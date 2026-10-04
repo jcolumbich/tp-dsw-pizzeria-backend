@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { findAll, findOne, add, update, remove } from './repartidor.controller.js';
 import { validarConSchema } from '../shared/validar-schema.js';
-import { crearRepartidorSchema, actualizarRepartidorSchema } from './repartidor.schema';
+import { crearRepartidorSchema, actualizarRepartidorSchema } from './repartidor.schema.js';
 
 export const repartidorRouter = Router();
 
