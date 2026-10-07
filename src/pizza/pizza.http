@@ -1,11 +1,32 @@
-### Obtener todas las pizzas (Devuelve la lista completa de la BD)
-GET http://localhost:3000/api/pizzas HTTP/1.1
+@baseUrl = http://localhost:3000
+
+### Login como admin.
+### GET /api/pizzas solo exige estar logueado (cualquier nivel); POST/PUT/DELETE exigen admin.
+### Para simplificar, este archivo usa el token de admin en todos los requests.
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "contrasenia": "admin123"
+}
 
 ###
 
-### Crear una nueva pizza (Pasa por tu middleware de sanitización)
-POST http://localhost:3000/api/pizzas HTTP/1.1
+@tokenAdmin = {{loginAdmin.response.body.$.data.token}}
+
+### Obtener todas las pizzas (Devuelve la lista completa de la BD)
+GET {{baseUrl}}/api/pizzas HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Crear una nueva pizza (nombre, precio >= 0, vegetariana y disponible son obligatorios)
+# @name crearPizza
+POST {{baseUrl}}/api/pizzas HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "nombre": "Muzzarella",
@@ -16,9 +37,13 @@ Content-Type: application/json
 
 ###
 
-### Probar sanitización (Se crea con los campos válidos, pero ignora la propiedad basura)
-POST http://localhost:3000/api/pizzas HTTP/1.1
+@pizzaCreadaId = {{crearPizza.response.body.$.data.id}}
+
+### Probar validación estricta: un campo extra ahora se RECHAZA (debería devolver 400,
+### "Unrecognized key"), ya no se ignora silenciosamente como con el viejo middleware de sanitización.
+POST {{baseUrl}}/api/pizzas HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "nombre": "Napolitana",
@@ -31,14 +56,44 @@ Content-Type: application/json
 
 ###
 
-### Obtener una pizza por ID (Cambiá el '1' por el ID autoincremental que te devuelva tu POST)
-GET http://localhost:3000/api/pizzas/1 HTTP/1.1
+### Probar validación: falta un campo obligatorio (disponible, debería devolver 400)
+POST {{baseUrl}}/api/pizzas HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "nombre": "Incompleta",
+  "precio": 1000,
+  "vegetariana": false
+}
 
 ###
 
-### Modificar una pizza por ID (Modifica cualquiera de sus campos)
-PUT http://localhost:3000/api/pizzas/1 HTTP/1.1
+### Un cliente (no admin) no puede crear pizzas (debería devolver 403). Necesitás un token de
+### cliente nivel 0: registrate con POST /api/auth/register (ver auth.http) y reemplazá el token.
+# POST {{baseUrl}}/api/pizzas HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer TOKEN_DE_UN_CLIENTE_NIVEL_0
+#
+# {
+#   "nombre": "Prohibida",
+#   "precio": 1000,
+#   "vegetariana": false,
+#   "disponible": true
+# }
+
+###
+
+### Obtener una pizza por ID (usá el id devuelto por el POST de arriba)
+GET {{baseUrl}}/api/pizzas/{{pizzaCreadaId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Modificar una pizza por ID (al menos uno de sus campos)
+PUT {{baseUrl}}/api/pizzas/{{pizzaCreadaId}} HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "precio": 9000,
@@ -47,5 +102,15 @@ Content-Type: application/json
 
 ###
 
+### Modificar una pizza: objeto vacío (debería devolver 400, "Debe enviar al menos un campo para actualizar")
+PUT {{baseUrl}}/api/pizzas/{{pizzaCreadaId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{}
+
+###
+
 ### Eliminar una pizza por ID
-DELETE http://localhost:3000/api/pizzas/1 HTTP/1.1
+DELETE {{baseUrl}}/api/pizzas/{{pizzaCreadaId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}

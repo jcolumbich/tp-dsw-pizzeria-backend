@@ -1,0 +1,154 @@
+@baseUrl = http://localhost:3000
+
+### Login como admin (todas las rutas de /api/envios exigen admin: verificarToken + requiereNivel(1))
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "contrasenia": "admin123"
+}
+
+###
+
+@tokenAdmin = {{loginAdmin.response.body.$.data.token}}
+
+### Obtener todos los envíos
+GET {{baseUrl}}/api/envios HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Crear un envío para un pedido existente (ajustá "pedidoId" a un pedido real de tu base).
+### Obligatorios: costo (>= 0), monto_propina (>= 0, no tiene default acá), pedidoId.
+### El body transforma pedidoId -> pedido antes de guardar.
+# @name crearEnvio
+POST {{baseUrl}}/api/envios HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "costo": 1500,
+  "monto_propina": 0,
+  "pedidoId": 1
+}
+
+###
+
+@envioCreadoId = {{crearEnvio.response.body.$.data.id}}
+
+### Crear un envío: pedidoId inexistente (debería devolver 404, "El pedido indicado no existe")
+POST {{baseUrl}}/api/envios HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "costo": 1500,
+  "monto_propina": 0,
+  "pedidoId": 999999
+}
+
+###
+
+### Crear un envío: falta monto_propina (debería devolver 400; a diferencia de /asignar-envio, acá no tiene default)
+POST {{baseUrl}}/api/envios HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "costo": 1500,
+  "pedidoId": 1
+}
+
+###
+
+### Crear un envío: costo negativo (debería devolver 400)
+POST {{baseUrl}}/api/envios HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "costo": -100,
+  "monto_propina": 0,
+  "pedidoId": 1
+}
+
+###
+
+### Crear un envío: texto en un campo numérico (debería devolver 400)
+POST {{baseUrl}}/api/envios HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "costo": "caro",
+  "monto_propina": 0,
+  "pedidoId": 1
+}
+
+###
+
+### Crear un envío: campo extra no permitido (debería devolver 400)
+POST {{baseUrl}}/api/envios HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "costo": 1500,
+  "monto_propina": 0,
+  "pedidoId": 1,
+  "repartidorId": 1
+}
+
+###
+
+### Obtener un envío por ID (usá el id devuelto por el POST de arriba)
+GET {{baseUrl}}/api/envios/{{envioCreadoId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Modificar un envío por ID (al menos un campo; costo/monto_propina/pedidoId son todos opcionales acá)
+PUT {{baseUrl}}/api/envios/{{envioCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "costo": 1800
+}
+
+###
+
+### Modificar un envío: objeto vacío (debería devolver 400, "Debe enviar al menos un campo para actualizar")
+PUT {{baseUrl}}/api/envios/{{envioCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{}
+
+###
+
+### Modificar un envío: costo negativo (debería devolver 400)
+PUT {{baseUrl}}/api/envios/{{envioCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "costo": -50
+}
+
+###
+
+### Eliminar un envío por ID (para no dejar basura de las pruebas de arriba)
+DELETE {{baseUrl}}/api/envios/{{envioCreadoId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Nota: la vía recomendada para asociar un envío a un pedido en el flujo normal de la app
+### es POST /api/pedidos/{id}/asignar-envio (ver pedido.http), que además valida el estado
+### del pedido y del repartidor. Este endpoint (/api/envios) es un CRUD genérico de bajo nivel
+### y no hace esas validaciones de negocio: solo chequea que el pedido exista.
+### Un pedido solo puede tener un envío (relación 1 a 1); crear un segundo envío para el mismo
+### pedido puede fallar por restricción de unicidad en la base en vez de un 409 controlado.

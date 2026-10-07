@@ -1,0 +1,53 @@
+@baseUrl = http://localhost:3000
+
+### Login como admin (todas las rutas de /api/detalle-pedido exigen admin: verificarToken + requiereNivel(1))
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "contrasenia": "admin123"
+}
+
+###
+
+@tokenAdmin = {{loginAdmin.response.body.$.data.token}}
+
+### Este módulo es de SOLO LECTURA: no tiene POST/PUT/DELETE.
+### Los detalles de un pedido se crean automáticamente al hacer POST /api/pedidos
+### (ver pedido.http) y nunca se modifican ni se borran por separado.
+
+### Obtener todos los detalles de pedido (de todos los pedidos)
+GET {{baseUrl}}/api/detalle-pedido HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Obtener los detalles de un pedido puntual (ajustá "53" a un pedido real de tu base)
+GET {{baseUrl}}/api/detalle-pedido/pedido/53 HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Obtener los detalles de un pedido: ID inválido (no numérico, debería devolver 400)
+GET {{baseUrl}}/api/detalle-pedido/pedido/abc HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Obtener un detalle puntual por pedidoId + pizzaId (clave compuesta; ajustá los IDs)
+GET {{baseUrl}}/api/detalle-pedido/53/1 HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Obtener un detalle puntual: combinación inexistente (debería devolver 404)
+GET {{baseUrl}}/api/detalle-pedido/999999/999999 HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Obtener un detalle puntual: IDs no numéricos (debería devolver 400)
+GET {{baseUrl}}/api/detalle-pedido/abc/def HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}

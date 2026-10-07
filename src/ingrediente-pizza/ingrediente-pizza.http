@@ -1,6 +1,24 @@
-### Crear una pizza de prueba primero (necesaria para el ingrediente-pizza)
-POST http://localhost:3000/api/pizzas HTTP/1.1
+@baseUrl = http://localhost:3000
+
+### Login como admin (todas las rutas de /api/ingrediente-pizza exigen admin: verificarToken + requiereNivel(1))
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login HTTP/1.1
 Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "contrasenia": "admin123"
+}
+
+###
+
+@tokenAdmin = {{loginAdmin.response.body.$.data.token}}
+
+### Crear una pizza de prueba primero (necesaria para el ingrediente-pizza)
+# @name crearPizza
+POST {{baseUrl}}/api/pizzas HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "nombre": "Napolitana",
@@ -11,9 +29,13 @@ Content-Type: application/json
 
 ###
 
+@pizzaDePruebaId = {{crearPizza.response.body.$.data.id}}
+
 ### Crear un ingrediente de prueba (necesario para el ingrediente-pizza)
-POST http://localhost:3000/api/ingredientes HTTP/1.1
+# @name crearIngrediente
+POST {{baseUrl}}/api/ingredientes HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "nombre": "Queso Muzzarella",
@@ -22,60 +44,111 @@ Content-Type: application/json
 
 ###
 
+@ingredienteDePruebaId = {{crearIngrediente.response.body.$.data.id}}
+
 ### Obtener todos los ingredientes de pizza
-GET http://localhost:3000/api/ingrediente-pizza HTTP/1.1
+GET {{baseUrl}}/api/ingrediente-pizza HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
 
 ###
 
-### Crear un ingrediente-pizza (usá los ids reales que te devolvieron los POST de arriba)
-POST http://localhost:3000/api/ingrediente-pizza HTTP/1.1
+### Crear un ingrediente-pizza (usa los ids reales creados arriba). cantidad debe ser > 0.
+POST {{baseUrl}}/api/ingrediente-pizza HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "cantidad": 200,
-  "pizzaId": 1,
-  "ingredienteId": 1
+  "pizzaId": {{pizzaDePruebaId}},
+  "ingredienteId": {{ingredienteDePruebaId}}
 }
 
 ###
 
 ### Probar validación: pizzaId inexistente (debería devolver 404)
-POST http://localhost:3000/api/ingrediente-pizza HTTP/1.1
+POST {{baseUrl}}/api/ingrediente-pizza HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "cantidad": 100,
-  "pizzaId": 9999,
-  "ingredienteId": 1
+  "pizzaId": 999999,
+  "ingredienteId": {{ingredienteDePruebaId}}
 }
 
 ###
 
 ### Probar validación: ingredienteId inexistente (debería devolver 404)
-POST http://localhost:3000/api/ingrediente-pizza HTTP/1.1
+POST {{baseUrl}}/api/ingrediente-pizza HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "cantidad": 100,
-  "pizzaId": 1,
-  "ingredienteId": 9999
+  "pizzaId": {{pizzaDePruebaId}},
+  "ingredienteId": 999999
 }
 
 ###
 
-### Obtener un ingrediente-pizza por ID (incluye pizza e ingrediente poblados)
-GET http://localhost:3000/api/ingrediente-pizza/1 HTTP/1.1
+### Probar validación: la pareja pizza+ingrediente ya existe (debería devolver 409; corré el bloque de "crear" de arriba antes)
+POST {{baseUrl}}/api/ingrediente-pizza HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "cantidad": 50,
+  "pizzaId": {{pizzaDePruebaId}},
+  "ingredienteId": {{ingredienteDePruebaId}}
+}
+
+###
+
+### Probar validación: cantidad <= 0 (debería devolver 400)
+POST {{baseUrl}}/api/ingrediente-pizza HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "cantidad": 0,
+  "pizzaId": {{pizzaDePruebaId}},
+  "ingredienteId": {{ingredienteDePruebaId}}
+}
+
+###
+
+### Probar validación estricta: campo extra no permitido (debería devolver 400, "Unrecognized key")
+POST {{baseUrl}}/api/ingrediente-pizza HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "cantidad": 100,
+  "pizzaId": {{pizzaDePruebaId}},
+  "ingredienteId": {{ingredienteDePruebaId}},
+  "notas": "extra queso"
+}
+
+###
+
+### Obtener un ingrediente-pizza por su clave compuesta (pizzaId/ingredienteId), incluye pizza
+### e ingrediente poblados. OJO: la clave es compuesta, no es un único "id".
+GET {{baseUrl}}/api/ingrediente-pizza/{{pizzaDePruebaId}}/{{ingredienteDePruebaId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
 
 ###
 
 ### Obtener la composición completa de una pizza (todos sus ingredientes)
-GET http://localhost:3000/api/ingrediente-pizza/pizza/1 HTTP/1.1
+GET {{baseUrl}}/api/ingrediente-pizza/pizza/{{pizzaDePruebaId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
 
 ###
 
-### Modificar la cantidad de un ingrediente-pizza
-PUT http://localhost:3000/api/ingrediente-pizza/1 HTTP/1.1
+### Modificar la cantidad de un ingrediente-pizza (el PUT solo acepta "cantidad"; cualquier
+### otro campo, incluido pizzaId/ingredienteId, se rechaza por ser un schema estricto con pick)
+PUT {{baseUrl}}/api/ingrediente-pizza/{{pizzaDePruebaId}}/{{ingredienteDePruebaId}} HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "cantidad": 250
@@ -83,5 +156,29 @@ Content-Type: application/json
 
 ###
 
-### Eliminar un ingrediente-pizza
-DELETE http://localhost:3000/api/ingrediente-pizza/1 HTTP/1.1
+### Modificar: campo no permitido en el PUT (debería devolver 400, "Unrecognized key")
+PUT {{baseUrl}}/api/ingrediente-pizza/{{pizzaDePruebaId}}/{{ingredienteDePruebaId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "cantidad": 250,
+  "pizzaId": {{pizzaDePruebaId}}
+}
+
+###
+
+### Eliminar un ingrediente-pizza por su clave compuesta
+DELETE {{baseUrl}}/api/ingrediente-pizza/{{pizzaDePruebaId}}/{{ingredienteDePruebaId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Limpieza: borrar la pizza y el ingrediente de prueba creados arriba
+DELETE {{baseUrl}}/api/pizzas/{{pizzaDePruebaId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+DELETE {{baseUrl}}/api/ingredientes/{{ingredienteDePruebaId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}

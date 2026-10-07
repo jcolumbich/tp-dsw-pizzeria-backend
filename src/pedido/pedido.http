@@ -1,0 +1,406 @@
+@baseUrl = http://localhost:3000
+
+### Login como admin (necesario para GET genérico, PUT y asignar-envio)
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "contrasenia": "admin123"
+}
+
+###
+
+@tokenAdmin = {{loginAdmin.response.body.$.data.token}}
+
+### Registrar un cliente de prueba (POST /api/pedidos exige nivel_permisos 0: "Solo los clientes pueden crear pedidos")
+### Si ya tenés un cliente de prueba, reemplazá este bloque por un login.
+# @name registrarCliente
+POST {{baseUrl}}/api/auth/register HTTP/1.1
+Content-Type: application/json
+
+{
+  "nombre": "Cliente",
+  "apellido": "DePrueba",
+  "email": "cliente.pedido.http@test.com",
+  "contrasenia": "clave123",
+  "domicilio": "Calle Falsa 123"
+}
+
+###
+
+@tokenCliente = {{registrarCliente.response.body.$.data.token}}
+
+### Crear un repartidor de prueba, activo (necesario para asignar-envio más abajo)
+# @name crearRepartidor
+POST {{baseUrl}}/api/repartidores HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "nombre": "Repartidor",
+  "apellido": "DePrueba",
+  "email": "repartidor.pedido.http@test.com",
+  "contrasenia": "clave12345",
+  "nivel_permisos": 0,
+  "estado": true,
+  "matricula": "HTTP-001"
+}
+
+###
+
+@repartidorDePruebaId = {{crearRepartidor.response.body.$.data.id}}
+
+### --- LECTURA ---
+
+### Obtener todos los pedidos (admin ve todos los pedidos de todos los clientes)
+GET {{baseUrl}}/api/pedidos HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Obtener pedidos filtrados por estado (valores válidos: Pendiente, En preparación, En camino, Entregado, Cancelado)
+GET {{baseUrl}}/api/pedidos?estado=Pendiente HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Filtro con un estado inválido (debería devolver 400)
+GET {{baseUrl}}/api/pedidos?estado=Enviado HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Un cliente solo ve SUS PROPIOS pedidos (el filtro por cliente lo aplica el backend según el token, no hace falta mandar clienteId)
+GET {{baseUrl}}/api/pedidos HTTP/1.1
+Authorization: Bearer {{tokenCliente}}
+
+###
+
+### Obtener un pedido por ID (ajustá el id al que te devuelva el POST de más abajo)
+GET {{baseUrl}}/api/pedidos/1 HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Un cliente intenta ver un pedido que no es suyo (debería devolver 403)
+GET {{baseUrl}}/api/pedidos/1 HTTP/1.1
+Authorization: Bearer {{tokenCliente}}
+
+###
+
+### --- CREACIÓN (solo clientes, nivel_permisos 0) ---
+
+### Crear un pedido: 1 Muzzarella (pizzaId 1), retiro en el local. Ajustá pizzaId a una pizza
+### real de tu base que tenga ingredientes cargados (ver ingrediente-pizza.http), si no vas a
+### obtener 400 "La pizza ... no tiene ingredientes cargados". El total y el descuento de stock
+### de los ingredientes los calcula el backend, nunca se mandan desde el cliente.
+# @name crearPedido
+POST {{baseUrl}}/api/pedidos HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "retiro": false,
+  "items": [
+    { "pizzaId": 1, "cantidad": 1 }
+  ]
+}
+
+###
+
+@pedidoCreadoId = {{crearPedido.response.body.$.data.id}}
+
+### Un admin NO puede crear pedidos (debería devolver 403, "Solo los clientes pueden crear pedidos")
+POST {{baseUrl}}/api/pedidos HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "retiro": true,
+  "items": [
+    { "pizzaId": 1, "cantidad": 1 }
+  ]
+}
+
+###
+
+### Crear un pedido: campo obligatorio ausente (falta items, debería devolver 400)
+POST {{baseUrl}}/api/pedidos HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "retiro": true
+}
+
+###
+
+### Crear un pedido: items vacío (debería devolver 400, "Debe incluir al menos una pizza")
+POST {{baseUrl}}/api/pedidos HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "retiro": true,
+  "items": []
+}
+
+###
+
+### Crear un pedido: cantidad fuera de rango, 0 (debería devolver 400)
+POST {{baseUrl}}/api/pedidos HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "retiro": true,
+  "items": [
+    { "pizzaId": 1, "cantidad": 0 }
+  ]
+}
+
+###
+
+### Crear un pedido: cantidad fuera de rango, > 100 (debería devolver 400, máximo 100 por pizza)
+POST {{baseUrl}}/api/pedidos HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "retiro": true,
+  "items": [
+    { "pizzaId": 1, "cantidad": 101 }
+  ]
+}
+
+###
+
+### Crear un pedido: la misma pizza repetida en dos items (debería devolver 400)
+POST {{baseUrl}}/api/pedidos HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "retiro": true,
+  "items": [
+    { "pizzaId": 1, "cantidad": 1 },
+    { "pizzaId": 1, "cantidad": 2 }
+  ]
+}
+
+###
+
+### Crear un pedido: tipo equivocado en "retiro" (debería devolver 400)
+POST {{baseUrl}}/api/pedidos HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "retiro": "si",
+  "items": [
+    { "pizzaId": 1, "cantidad": 1 }
+  ]
+}
+
+###
+
+### Crear un pedido: campo extra no permitido dentro de un item (debería devolver 400)
+POST {{baseUrl}}/api/pedidos HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "retiro": true,
+  "items": [
+    { "pizzaId": 1, "cantidad": 1, "notas": "sin cebolla" }
+  ]
+}
+
+###
+
+### --- ACTUALIZACIÓN DE ESTADO (solo admin) ---
+
+### Confirmar el pedido creado arriba: Pendiente -> En preparación (requisito para asignar-envio)
+PUT {{baseUrl}}/api/pedidos/{{pedidoCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "estado": "En preparación"
+}
+
+###
+
+### Un cliente no puede cambiar el estado de un pedido (debería devolver 403)
+PUT {{baseUrl}}/api/pedidos/{{pedidoCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "estado": "Entregado"
+}
+
+###
+
+### Actualizar estado: valor fuera del enum (debería devolver 400)
+PUT {{baseUrl}}/api/pedidos/{{pedidoCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "estado": "Enviado"
+}
+
+###
+
+### Actualizar estado: objeto vacío (debería devolver 400, estado es obligatorio en este schema)
+PUT {{baseUrl}}/api/pedidos/{{pedidoCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{}
+
+###
+
+### Actualizar estado: campo extra no permitido (debería devolver 400)
+PUT {{baseUrl}}/api/pedidos/{{pedidoCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "estado": "Cancelado",
+  "motivo": "ya no lo quiero"
+}
+
+###
+
+### Transición de estado inválida: el pedido está "En preparación", no se puede pasar directo a "Entregado"
+### sin pasar por "En camino" (debería devolver 409, "Solo se puede confirmar un pedido pendiente")
+PUT {{baseUrl}}/api/pedidos/{{pedidoCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "estado": "Entregado"
+}
+
+###
+
+### --- ASIGNAR ENVÍO (solo admin) ---
+### OJO con el orden: una vez que la asignación exitosa (más abajo) se ejecuta, el pedido pasa
+### a tener envío y cambia a estado "En camino". A partir de ahí CUALQUIER otro intento de
+### asignar-envio sobre este mismo pedido devuelve 409 ("ya tiene un envío asignado" o
+### "confirmá el pedido antes de asignar el envío"), tapando otros errores más específicos
+### (como el 404 de repartidor inexistente). Por eso los casos de error que no dependen del
+### estado del pedido van ANTES de la asignación exitosa.
+
+### Asignar envío: campo obligatorio ausente (falta costo, debería devolver 400)
+POST {{baseUrl}}/api/pedidos/{{pedidoCreadoId}}/asignar-envio HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "repartidorId": {{repartidorDePruebaId}}
+}
+
+###
+
+### Asignar envío: costo negativo (debería devolver 400)
+POST {{baseUrl}}/api/pedidos/{{pedidoCreadoId}}/asignar-envio HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "repartidorId": {{repartidorDePruebaId}},
+  "costo": -100
+}
+
+###
+
+### Asignar envío: campo extra no permitido (debería devolver 400)
+POST {{baseUrl}}/api/pedidos/{{pedidoCreadoId}}/asignar-envio HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "repartidorId": {{repartidorDePruebaId}},
+  "costo": 800,
+  "nota": "urgente"
+}
+
+###
+
+### Asignar envío: repartidorId inexistente (debería devolver 404). Tiene que correrse ANTES
+### de la asignación exitosa de abajo (ver nota de más arriba).
+POST {{baseUrl}}/api/pedidos/{{pedidoCreadoId}}/asignar-envio HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "repartidorId": 999999,
+  "costo": 800
+}
+
+###
+
+### Asignar envío y repartidor al pedido (debe estar "En preparación", sin retiro y sin envío previo)
+POST {{baseUrl}}/api/pedidos/{{pedidoCreadoId}}/asignar-envio HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "repartidorId": {{repartidorDePruebaId}},
+  "costo": 800
+}
+
+###
+
+### Asignar envío: el pedido ya tiene uno asignado (debería devolver 409; corré el bloque de arriba antes)
+POST {{baseUrl}}/api/pedidos/{{pedidoCreadoId}}/asignar-envio HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "repartidorId": {{repartidorDePruebaId}},
+  "costo": 800
+}
+
+###
+
+### Asignar envío a un pedido con retiro en el local (debería devolver 400).
+### Ajustá el id a un pedido real de tu base con "retiro": true.
+POST {{baseUrl}}/api/pedidos/53/asignar-envio HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "repartidorId": {{repartidorDePruebaId}},
+  "costo": 800
+}
+
+###
+
+### --- LIMPIEZA ---
+### No existe DELETE /api/pedidos/:id (no está implementado en pedido.routes.ts).
+### Para "deshacer" un pedido de prueba, lo más parecido es cancelarlo (repone el stock
+### descontado, pero la fila del pedido queda para siempre en la base):
+PUT {{baseUrl}}/api/pedidos/{{pedidoCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "estado": "Cancelado"
+}
+
+###
+
+### El cliente y el repartidor de prueba creados arriba sí se pueden borrar:
+DELETE {{baseUrl}}/api/repartidores/{{repartidorDePruebaId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+DELETE {{baseUrl}}/api/clientes/{{registrarCliente.response.body.$.data.usuario.id}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}

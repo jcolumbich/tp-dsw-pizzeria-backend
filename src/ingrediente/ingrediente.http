@@ -1,11 +1,30 @@
-### Obtener todos los ingredientes (Devuelve la lista completa de la BD)
-GET http://localhost:3000/api/ingredientes HTTP/1.1
+@baseUrl = http://localhost:3000
+
+### Login como admin (todas las rutas de /api/ingredientes exigen admin: verificarToken + requiereNivel(1))
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "contrasenia": "admin123"
+}
 
 ###
 
-### Crear un nuevo ingrediente (Pasa por tu middleware de sanitización)
-POST http://localhost:3000/api/ingredientes HTTP/1.1
+@tokenAdmin = {{loginAdmin.response.body.$.data.token}}
+
+### Obtener todos los ingredientes (Devuelve la lista completa de la BD)
+GET {{baseUrl}}/api/ingredientes HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Crear un nuevo ingrediente (nombre y stock >= 0 son obligatorios)
+# @name crearIngrediente
+POST {{baseUrl}}/api/ingredientes HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "nombre": "Muzzarella",
@@ -14,9 +33,13 @@ Content-Type: application/json
 
 ###
 
-### Probar sanitización (Se crea con nombre y stock, pero ignora la propiedad basura)
-POST http://localhost:3000/api/ingredientes HTTP/1.1
+@ingredienteCreadoId = {{crearIngrediente.response.body.$.data.id}}
+
+### Probar validación estricta: un campo extra ahora se RECHAZA (debería devolver 400,
+### "Unrecognized key"), ya no se ignora silenciosamente como con el viejo middleware de sanitización.
+POST {{baseUrl}}/api/ingredientes HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
   "nombre": "Salsa de Tomate",
@@ -27,21 +50,45 @@ Content-Type: application/json
 
 ###
 
-### Obtener un ingrediente por ID (Cambiá el '1' por el ID autoincremental que te devuelva tu POST)
-GET http://localhost:3000/api/ingredientes/1 HTTP/1.1
-
-###
-
-### Modificar un ingrediente por ID (Modifica nombre y/o stock)
-PUT http://localhost:3000/api/ingredientes/1 HTTP/1.1
+### Probar validación: stock negativo (debería devolver 400)
+POST {{baseUrl}}/api/ingredientes HTTP/1.1
 Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
 
 {
-  "nombre": "Muzzarella Especial",
-  "stock": 50.0
+  "nombre": "Ingrediente Inválido",
+  "stock": -5
 }
 
 ###
 
+### Obtener un ingrediente por ID (usá el id devuelto por el POST de arriba)
+GET {{baseUrl}}/api/ingredientes/{{ingredienteCreadoId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Modificar un ingrediente por ID (al menos un campo; nombre y/o stock)
+PUT {{baseUrl}}/api/ingredientes/{{ingredienteCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{
+  "nombre": "Muzzarella Especial",
+  "stock": 50
+}
+
+###
+
+### Modificar un ingrediente: objeto vacío (debería devolver 400, "Debe enviar al menos un campo para actualizar")
+PUT {{baseUrl}}/api/ingredientes/{{ingredienteCreadoId}} HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer {{tokenAdmin}}
+
+{}
+
+###
+
 ### Eliminar un ingrediente por ID
-DELETE http://localhost:3000/api/ingredientes/1 HTTP/1.1
+DELETE {{baseUrl}}/api/ingredientes/{{ingredienteCreadoId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
