@@ -6,7 +6,7 @@ export const loginSchema = z.strictObject({
   contrasenia: z.string().min(1, 'La contraseña es requerida').max(128, 'La contraseña admite hasta 128 caracteres'),
 });
 
-export const registerSchema = z.object({
+export const registerSchema = z.strictObject({
   nombre: crearClienteSchema.shape.nombre,
   apellido: crearClienteSchema.shape.apellido,
   email: crearClienteSchema.shape.email,
