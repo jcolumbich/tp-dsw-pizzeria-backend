@@ -75,6 +75,19 @@ export async function update(req: Request, res: Response) {
   }
 }
 
+export async function remove(req: Request, res: Response) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'El ID provisto debe ser un número entero positivo válido' });
+    }
+    await service.eliminarPedido(id);
+    return res.status(200).json({ message: 'Pedido eliminado exitosamente' });
+  } catch (error) {
+    return handleError(res, error);
+  }
+}
+
 export async function asignarEnvio(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);

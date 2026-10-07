@@ -113,6 +113,6 @@ export async function asignarEnvio(pedidoId: number, repartidorId: number, costo
 }
 
 export async function eliminarPedido(id: number): Promise<void> {
-  const pedido = await repository.cancelarConReposicion(id);
-  if (!pedido) throw new HttpError(404, 'Pedido no encontrado');
+  const eliminado = await repository.delete(id);
+  if (!eliminado) throw new HttpError(404, 'Pedido no encontrado');
 }
