@@ -200,12 +200,29 @@ export class PedidoRepository implements Repository<Pedido> {
   }
 
   async delete(id: number): Promise<boolean> {
-    const pedido = await orm.em.findOne(Pedido, { id });
+    return orm.em.transactional(async (em) => {
+      const pedido = await em.findOne(Pedido, { id }, {
+        populate: ['detalles', 'envio'],
+        lockMode: LockMode.PESSIMISTIC_WRITE
+      });
 
-    if (!pedido) return false;
+      if (!pedido) {
+        return false;
+      }
 
-    await orm.em.removeAndFlush(pedido);
-    return true;
+      if (pedido.estado !== 'Cancelado') {
+        throw new HttpError(409, 'Solo se puede eliminar un pedido en estado Cancelado (su stock ya fue repuesto al cancelarlo)');
+      }
+
+      if (pedido.envio) {
+        em.remove(pedido.envio);
+      }
+
+      em.remove(pedido);
+      await em.flush();
+
+      return true;
+    });
   }
 
   async cancelarConReposicion(id: number): Promise<Pedido | null> {

@@ -1,8 +1,9 @@
 @baseUrl = http://localhost:3000
 
 ### Login como admin.
-### GET /api/pizzas solo exige estar logueado (cualquier nivel); POST/PUT/DELETE exigen admin.
-### Para simplificar, este archivo usa el token de admin en todos los requests.
+### GET /api/pizzas y GET /api/pizzas/:id son públicos (no requieren token, para mostrar la carta
+### a visitantes); POST/PUT/DELETE exigen admin.
+### Para simplificar, este archivo usa el token de admin en los requests de escritura.
 # @name loginAdmin
 POST {{baseUrl}}/api/auth/login HTTP/1.1
 Content-Type: application/json
@@ -15,6 +16,11 @@ Content-Type: application/json
 ###
 
 @tokenAdmin = {{loginAdmin.response.body.$.data.token}}
+
+### Obtener todas las pizzas, sin token (ruta pública, debería devolver 200)
+GET {{baseUrl}}/api/pizzas HTTP/1.1
+
+###
 
 ### Obtener todas las pizzas (Devuelve la lista completa de la BD)
 GET {{baseUrl}}/api/pizzas HTTP/1.1

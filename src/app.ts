@@ -41,8 +41,10 @@ app.use('/api/envios', verificarToken, requiereNivel(1), envioRouter);
 app.use('/api/ingrediente-pizza', verificarToken, requiereNivel(1), ingredientePizzaRouter);
 app.use('/api/clientes', verificarToken, requiereNivel(1), clienteRouter);
 
+// Pizzas: lectura pública (carta), escritura solo admin (verificarToken se aplica por ruta en pizza.routes.ts)
+app.use('/api/pizzas', pizzaRouter);
+
 // Rutas para usuarios autenticados; cada router controla sus operaciones
-app.use('/api/pizzas', verificarToken, pizzaRouter);
 app.use('/api/pedidos', verificarToken, pedidoRouter);
 
 app.use((error: unknown,_req: express.Request,res: express.Response,next: express.NextFunction) => {

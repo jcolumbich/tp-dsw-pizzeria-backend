@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { findAll, findOne, add, update, asignarEnvio } from './pedido.controller.js';
+import { findAll, findOne, add, update, remove, asignarEnvio } from './pedido.controller.js';
 import { requiereNivel } from '../auth/auth.middleware.js';
 import { validarConSchema } from '../shared/validar-schema.js';
 import { crearPedidoSchema, actualizarPedidoSchema, asignarEnvioSchema } from './pedido.schema.js';
@@ -18,3 +18,4 @@ pedidoRouter.post('/', (req, res, next) => {
 
 pedidoRouter.post('/:id/asignar-envio', requiereNivel(1), validarConSchema(asignarEnvioSchema, 'envioInput'), asignarEnvio);
 pedidoRouter.put('/:id', requiereNivel(1), validarConSchema(actualizarPedidoSchema, 'pedidoInput'), update);
+pedidoRouter.delete('/:id', requiereNivel(1), remove);
