@@ -1,0 +1,12 @@
+[1mdiff --git a/src/app.ts b/src/app.ts[m
+[1mindex fd6c7dc..3f4b11a 100644[m
+[1m--- a/src/app.ts[m
+[1m+++ b/src/app.ts[m
+[36m@@ -53,6 +53,7 @@[m [mapp.use((error: unknown,_req: express.Request,res: express.Response,next: expres[m
+ app.use((_, res) => {[m
+   return res.status(404).json({ message: 'Recurso no encontrado' });[m
+ });[m
+[32m+[m
+ // Jest establece JEST_WORKER_ID durante los tests.[m
+ // Supertest utiliza app directamente, sin iniciar el servidor en el puerto 3000.[m
+ if (process.env.JEST_WORKER_ID === undefined) {[m

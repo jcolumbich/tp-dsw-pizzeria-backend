@@ -14,4 +14,7 @@ export class Pizza extends BaseEntity {
 
   @Property({ type: 'boolean' })
   disponible!: boolean;
+
+  @Property({ type: 'string', nullable: true })
+  imagen?: string;
 }

@@ -17,17 +17,22 @@ export async function buscarPizza(id: number): Promise<Pizza> {
   return pizza;
 }
 
-export async function crearPizza(datos: CrearPizzaInput): Promise<Pizza> {
+export async function crearPizza(datos: CrearPizzaInput, imagen?: string): Promise<Pizza> {
   const pizza = new Pizza();
   pizza.nombre = datos.nombre;
   pizza.precio = datos.precio;
   pizza.vegetariana = datos.vegetariana;
   pizza.disponible = datos.disponible;
+  pizza.imagen = imagen;
   return repository.add(pizza);
 }
 
-export async function actualizarPizza(id: number, datos: ActualizarPizzaInput): Promise<Pizza> {
-  const pizza = await repository.update(id, datos);
+export async function actualizarPizza(id: number, datos: ActualizarPizzaInput, imagen?: string): Promise<Pizza> {
+  const cambios: Partial<Pizza> = { ...datos };
+  if (imagen !== undefined) {
+    cambios.imagen = imagen;
+  }
+  const pizza = await repository.update(id, cambios);
   if (!pizza) throw new HttpError(404, 'Pizza no encontrada');
   return pizza;
 }

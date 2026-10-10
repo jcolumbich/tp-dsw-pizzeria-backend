@@ -3,3 +3,4 @@ dist/
 .env
 *.tsbuildinfo
 .env.production.local
+uploads/

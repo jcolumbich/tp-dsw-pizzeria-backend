@@ -16,6 +16,7 @@ import { clienteRouter } from './cliente/cliente.routes.js';
 import { authRouter } from './auth/auth.routes.js';
 import { verificarToken, requiereNivel } from './auth/auth.middleware.js';
 import { handleError } from './shared/handle-error.js';
+import { CARPETA_IMAGENES_PIZZA } from './pizza/pizza.imagen.js';
 
 export const app = express();
 
@@ -23,6 +24,10 @@ const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 app.use(cors({ origin: frontendUrl, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],allowedHeaders: ['Content-Type', 'Authorization'],}));
 app.use(express.json());
+app.use('/uploads/pizzas', express.static(CARPETA_IMAGENES_PIZZA, {
+  dotfiles: 'deny',
+  setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
+}));
 
 await syncSchema();
 
