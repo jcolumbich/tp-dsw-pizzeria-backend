@@ -54,8 +54,8 @@ export async function add(req: Request, res: Response) {
       return res.status(403).json({ message: 'Solo los clientes pueden crear pedidos' });
     }
 
-    const { retiro, items } = req.body.pedidoInput;
-    const nuevoPedido = await service.crearPedido(retiro, req.usuario.id, items);
+    const { retiro, items, monto_propina } = req.body.pedidoInput;
+    const nuevoPedido = await service.crearPedido(retiro, req.usuario.id, items, monto_propina);
     return res.status(201).json({ message: 'Pedido creado con éxito', data: nuevoPedido });
   } catch (error) {
     return handleError(res, error);

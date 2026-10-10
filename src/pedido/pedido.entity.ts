@@ -5,6 +5,11 @@ import { Envio } from '../envio/envio.entity.js';
 import { Repartidor } from '../repartidor/repartidor.entity.js';
 import { Cliente } from '../cliente/cliente.entity.js';
 
+export interface ConsumoIngredientePedido {
+  ingredienteId: number;
+  cantidad: number;
+}
+
 @Entity()
 export class Pedido extends BaseEntity {
   @Property({ type: 'Date' })
@@ -13,11 +18,17 @@ export class Pedido extends BaseEntity {
   @Property({ type: 'number' })
   total: number = 0;
 
+  @Property({ type: 'double', default: 0 })
+  monto_propina: number = 0;
+
   @Property({ type: 'boolean' })
   retiro!: boolean;
 
   @Property({ type: 'string' })
   estado: string = 'Pendiente';
+
+  @Property({ type: 'json', nullable: true, hidden: true })
+  consumoIngredientes?: ConsumoIngredientePedido[] | null;
 
   @OneToMany(() => DetallePedido, (detalle) => detalle.pedido, {
     cascade: [Cascade.ALL],

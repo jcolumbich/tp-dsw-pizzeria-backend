@@ -3,6 +3,8 @@ import { orm } from '../shared/db/orm.js';
 import { Pedido } from './pedido.entity.js';
 import { Pizza } from '../pizza/pizza.entity.js';
 import { Cliente } from '../cliente/cliente.entity.js';
+import { Envio } from '../envio/envio.entity.js';
+import { Repartidor } from '../repartidor/repartidor.entity.js';
 import { DetallePedido } from '../detalle-pedido/detalle-pedido.entity.js';
 import { Ingrediente } from '../ingrediente/ingrediente.entity.js';
 import { IngredientePizza } from '../ingrediente-pizza/ingrediente-pizza.entity.js';
@@ -40,7 +42,7 @@ export class PedidoRepository implements Repository<Pedido> {
     return pedido;
   }
 
-  async addConItems(retiro: boolean, clienteId: number, items: ItemPedidoInput[]): Promise<Pedido> {
+  async addConItems(retiro: boolean, clienteId: number, items: ItemPedidoInput[], montoPropina: number = 0): Promise<Pedido> {
     return orm.em.transactional(async (em) => {
       const cliente = await em.findOne(Cliente, { id: clienteId });
 
@@ -101,7 +103,8 @@ export class PedidoRepository implements Repository<Pedido> {
 
       const ingredientes = await em.find(Ingrediente, { id: { $in: ingredienteIds } }, {
         lockMode: LockMode.PESSIMISTIC_WRITE,
-        orderBy: { id: 'ASC' }
+        orderBy: { id: 'ASC' },
+        refresh: true
       });
 
       const ingredientesPorId = new Map(ingredientes.map((ingrediente) => [ingrediente.id, ingrediente]));
@@ -128,7 +131,12 @@ export class PedidoRepository implements Repository<Pedido> {
         cliente,
         estado: 'Pendiente',
         dia: new Date(),
-        total: 0
+        total: 0,
+        monto_propina: montoPropina,
+        consumoIngredientes: [...cantidadesNecesarias.entries()].map(([ingredienteId, cantidad]) => ({
+          ingredienteId,
+          cantidad
+        }))
       });
 
       em.persist(pedido);
@@ -199,6 +207,90 @@ export class PedidoRepository implements Repository<Pedido> {
     return pedido;
   }
 
+  async asignarEnvioConRepartidor(pedidoId: number, repartidorId: number, costo: number, montoPropina?: number): Promise<Pedido> {
+    return orm.em.transactional(async (em) => {
+      const pedido = await em.findOne(Pedido, { id: pedidoId }, {
+        lockMode: LockMode.PESSIMISTIC_WRITE,
+        refresh: true
+      });
+
+      if (!pedido) throw new HttpError(404, 'Pedido no encontrado');
+      if (pedido.retiro) {
+        throw new HttpError(400, 'No se puede asignar un envío a un pedido con retiro en el local');
+      }
+
+      const envioExistente = await em.findOne(Envio, { pedido: pedidoId }, {
+        refresh: true
+      });
+
+      if (envioExistente) {
+        throw new HttpError(409, 'El pedido ya tiene un envío asignado');
+      }
+      if (pedido.estado !== 'En preparación') {
+        throw new HttpError(409, 'Confirmá el pedido antes de asignar el envío');
+      }
+
+      const repartidor = await em.findOne(Repartidor, { id: repartidorId }, {
+        lockMode: LockMode.PESSIMISTIC_WRITE,
+        refresh: true
+      });
+
+      if (!repartidor) throw new HttpError(404, 'Repartidor no encontrado');
+      if (!repartidor.estado) {
+        throw new HttpError(400, 'El repartidor seleccionado no está activo');
+      }
+
+      const envio = em.create(Envio, {
+        costo,
+        monto_propina: montoPropina ?? pedido.monto_propina ?? 0,
+        pedido
+      });
+
+      pedido.envio = envio;
+      pedido.monto_propina = envio.monto_propina ?? 0;
+      pedido.repartidor = repartidor;
+      pedido.estado = 'En camino';
+      em.persist(envio);
+      await em.flush();
+
+      await em.populate(pedido, ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio']);
+      return pedido;
+    });
+  }
+
+  async marcarEntregado(id: number): Promise<Pedido | null> {
+    return orm.em.transactional(async (em) => {
+      const pedido = await em.findOne(Pedido, { id }, {
+        lockMode: LockMode.PESSIMISTIC_WRITE,
+        refresh: true
+      });
+
+      if (!pedido) return null;
+
+      await em.populate(pedido, ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio']);
+
+      if (pedido.estado === 'Entregado') return pedido;
+      if (pedido.estado === 'Cancelado') {
+        throw new HttpError(409, 'No se puede entregar un pedido cancelado');
+      }
+
+      const estadoEsperado = pedido.retiro ? 'En preparación' : 'En camino';
+      if (pedido.estado !== estadoEsperado) {
+        throw new HttpError(409, pedido.retiro
+          ? 'El pedido debe estar en preparación antes de confirmar el retiro'
+          : 'El pedido debe estar en camino antes de confirmar la entrega');
+      }
+
+      if (!pedido.retiro && (!pedido.envio || !pedido.repartidor)) {
+        throw new HttpError(409, 'El pedido debe tener un envío y un repartidor asignados');
+      }
+
+      pedido.estado = 'Entregado';
+      await em.flush();
+      return pedido;
+    });
+  }
+
   async delete(id: number): Promise<boolean> {
     return orm.em.transactional(async (em) => {
       const pedido = await em.findOne(Pedido, { id }, {
@@ -226,81 +318,55 @@ export class PedidoRepository implements Repository<Pedido> {
   }
 
   async cancelarConReposicion(id: number): Promise<Pedido | null> {
-  return orm.em.transactional(async (em) => {
-    const pedido = await em.findOne(Pedido, { id }, {
-      populate: ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio'],
-      lockMode: LockMode.PESSIMISTIC_WRITE
-    });
+    return orm.em.transactional(async (em) => {
+      const pedido = await em.findOne(Pedido, { id }, {
+        populate: ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio'],
+        lockMode: LockMode.PESSIMISTIC_WRITE,
+        refresh: true
+      });
 
-    if (!pedido) {
-      return null;
-    }
+      if (!pedido) return null;
+      if (pedido.estado === 'Cancelado') return pedido;
+      if (pedido.estado === 'Entregado') {
+        throw new HttpError(409, 'No se puede cancelar un pedido que ya fue entregado');
+      }
 
-    if (pedido.estado === 'Cancelado') {
+      const consumos = pedido.consumoIngredientes;
+      if (!Array.isArray(consumos) || consumos.length === 0) {
+        throw new HttpError(409, 'Este pedido anterior no tiene el consumo de ingredientes registrado. No se puede reponer su stock automáticamente: requiere una revisión manual.');
+      }
+
+      const cantidadesAReponer = new Map<number, number>();
+      for (const consumo of consumos) {
+        if (!consumo || !Number.isSafeInteger(consumo.ingredienteId) || consumo.ingredienteId <= 0 ||
+          !Number.isFinite(consumo.cantidad) || consumo.cantidad <= 0 || cantidadesAReponer.has(consumo.ingredienteId)) {
+          throw new HttpError(409, 'El consumo de ingredientes registrado no es válido. Revisá el pedido antes de cancelarlo.');
+        }
+        cantidadesAReponer.set(consumo.ingredienteId, consumo.cantidad);
+      }
+
+      const ingredienteIds = [...cantidadesAReponer.keys()].sort((a, b) => a - b);
+      const ingredientes = await em.find(Ingrediente, { id: { $in: ingredienteIds } }, {
+        lockMode: LockMode.PESSIMISTIC_WRITE,
+        orderBy: { id: 'ASC' },
+        refresh: true
+      });
+      const ingredientesPorId = new Map(ingredientes.map((ingrediente) => [ingrediente.id, ingrediente]));
+
+      for (const ingredienteId of cantidadesAReponer.keys()) {
+        if (!ingredientesPorId.has(ingredienteId)) {
+          throw new HttpError(409, `No se puede reponer el ingrediente con id ${ingredienteId} porque ya no existe`);
+        }
+      }
+
+      for (const [ingredienteId, cantidadAReponer] of cantidadesAReponer) {
+        ingredientesPorId.get(ingredienteId)!.stock += cantidadAReponer;
+      }
+
+      pedido.estado = 'Cancelado';
+      pedido.repartidor = undefined;
+      await em.flush();
       return pedido;
-    }
-
-    if (pedido.estado === 'Entregado') {
-      throw new HttpError(409, 'No se puede cancelar un pedido que ya fue entregado');
-    }
-
-    const pizzaIds = pedido.detalles.getItems().map((detalle) => detalle.pizza.id);
-
-    const recetas = await em.find(IngredientePizza, { pizza: { $in: pizzaIds } }, {
-      populate: ['pizza', 'ingrediente']
     });
-
-    const recetasPorPizza = new Map<number, IngredientePizza[]>();
-
-    for (const receta of recetas) {
-      const pizzaId = receta.pizza.id;
-      const recetasDePizza = recetasPorPizza.get(pizzaId) ?? [];
-      recetasDePizza.push(receta);
-      recetasPorPizza.set(pizzaId, recetasDePizza);
-    }
-
-    const cantidadesAReponer = new Map<number, number>();
-
-    for (const detalle of pedido.detalles) {
-      const recetasDePizza = recetasPorPizza.get(detalle.pizza.id) ?? [];
-
-      if (recetasDePizza.length === 0) {
-        throw new HttpError(409, `No se puede cancelar el pedido porque la pizza "${detalle.pizza.nombre}" no tiene ingredientes cargados`);
-      }
-
-      for (const receta of recetasDePizza) {
-        const ingredienteId = receta.ingrediente.id;
-        const cantidadAReponer = receta.cantidad * detalle.cantidad;
-        const cantidadAcumulada = cantidadesAReponer.get(ingredienteId) ?? 0;
-        cantidadesAReponer.set(ingredienteId, cantidadAcumulada + cantidadAReponer);
-      }
-    }
-
-    const ingredienteIds = [...cantidadesAReponer.keys()].sort((a, b) => a - b);
-
-    const ingredientes = await em.find(Ingrediente, { id: { $in: ingredienteIds } }, {
-      lockMode: LockMode.PESSIMISTIC_WRITE,
-      orderBy: { id: 'ASC' }
-    });
-
-    const ingredientesPorId = new Map(ingredientes.map((ingrediente) => [ingrediente.id, ingrediente]));
-
-    for (const [ingredienteId, cantidadAReponer] of cantidadesAReponer) {
-      const ingrediente = ingredientesPorId.get(ingredienteId);
-
-      if (!ingrediente) {
-        throw new HttpError(409, `No se puede reponer el ingrediente con id ${ingredienteId}`);
-      }
-
-      ingrediente.stock += cantidadAReponer;
-    }
-
-     pedido.estado = 'Cancelado';
-     pedido.repartidor = undefined;
-
-     await em.flush();
-
-    return pedido;
-  });
-}
+  }
 }

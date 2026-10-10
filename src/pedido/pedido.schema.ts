@@ -20,16 +20,22 @@ const itemsPedidoSchema = z.array(itemPedidoSchema).min(1, 'Debe incluir al meno
   { message: 'No puede repetir una pizza: indique su cantidad en un único ítem' }
 );
 
-export const crearPedidoSchema = z.strictObject({
+const pedidoInputSchema = z.strictObject({
   retiro: z.boolean(),
+  monto_propina: z.number().min(0, 'La propina debe ser mayor o igual a 0').multipleOf(0.01, 'La propina admite hasta dos decimales').default(0),
   items: itemsPedidoSchema,
   clienteId: idSchema.optional(),
   estado: estadoPedidoSchema.optional(),
 });
 
-export const crearPedidoConClienteSchema = crearPedidoSchema.extend({
+const validarPropina = (datos: { retiro: boolean; monto_propina: number }) => !datos.retiro || datos.monto_propina === 0;
+const errorPropina = { message: 'La propina para el repartidor solo está disponible en pedidos con envío', path: ['monto_propina'] };
+
+export const crearPedidoSchema = pedidoInputSchema.refine(validarPropina, errorPropina);
+
+export const crearPedidoConClienteSchema = pedidoInputSchema.extend({
   clienteId: idSchema,
-});
+}).refine(validarPropina, errorPropina);
 
 export const actualizarPedidoSchema = z.strictObject({
   estado: estadoPedidoSchema,

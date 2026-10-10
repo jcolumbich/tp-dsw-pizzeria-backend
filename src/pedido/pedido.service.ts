@@ -1,15 +1,10 @@
 import { Pedido } from './pedido.entity.js';
 import { PedidoRepository } from './pedido.repository.js';
 import type { ItemPedidoInput } from './pedido.repository.js';
-import { RepartidorRepository } from '../repartidor/repartidor.repository.js';
-import { EnvioRepository } from '../envio/envio.repository.js';
-import { Envio } from '../envio/envio.entity.js';
 import { HttpError } from '../shared/http-error.js';
 import { crearPedidoConClienteSchema, actualizarPedidoSchema, asignarEnvioSchema } from './pedido.schema.js';
 
 const repository = new PedidoRepository();
-const envioRepository = new EnvioRepository();
-const repartidorRepository = new RepartidorRepository();
 
 export async function listarPedidos(estado?: string, clienteId?: number): Promise<Pedido[]> {
   return repository.findAll(estado, clienteId);
@@ -21,8 +16,8 @@ export async function buscarPedido(id: number): Promise<Pedido> {
   return pedido;
 }
 
-export async function crearPedido(retiro: unknown, clienteId: unknown, items: unknown): Promise<Pedido> {
-  const resultado = crearPedidoConClienteSchema.safeParse({ retiro, clienteId, items });
+export async function crearPedido(retiro: unknown, clienteId: unknown, items: unknown, montoPropina: unknown = 0): Promise<Pedido> {
+  const resultado = crearPedidoConClienteSchema.safeParse({ retiro, clienteId, items, monto_propina: montoPropina });
   if (!resultado.success) {
     throw new HttpError(400, resultado.error.issues[0]?.message ?? 'Datos inválidos');
   }
@@ -37,7 +32,7 @@ export async function crearPedido(retiro: unknown, clienteId: unknown, items: un
     ([pizzaId, cantidad]) => ({ pizzaId, cantidad })
   );
 
-  return repository.addConItems(datos.retiro, datos.clienteId, itemsPedido);
+  return repository.addConItems(datos.retiro, datos.clienteId, itemsPedido, datos.monto_propina);
 }
 
 export async function actualizarPedido(id: number, entrada: Partial<{ retiro: boolean; estado: string }>): Promise<Pedido> {
@@ -46,6 +41,12 @@ export async function actualizarPedido(id: number, entrada: Partial<{ retiro: bo
     throw new HttpError(400, resultado.error.issues[0]?.message ?? 'Solo se puede actualizar el estado del pedido');
   }
   const datos = resultado.data;
+
+  if (datos.estado === 'Entregado') {
+    const pedidoEntregado = await repository.marcarEntregado(id);
+    if (!pedidoEntregado) throw new HttpError(404, 'Pedido no encontrado');
+    return pedidoEntregado;
+  }
 
   const pedidoActual = await repository.findOne(id);
   if (!pedidoActual) throw new HttpError(404, 'Pedido no encontrado');
@@ -80,36 +81,7 @@ export async function asignarEnvio(pedidoId: number, repartidorId: number, costo
   }
   const datos = resultado.data;
 
-  const pedido = await repository.findOne(pedidoId);
-  if (!pedido) throw new HttpError(404, 'Pedido no encontrado');
-  if (pedido.retiro) {
-    throw new HttpError(400, 'No se puede asignar un envío a un pedido con retiro en el local');
-  }
-  if (pedido.estado !== 'En preparación') {
-    throw new HttpError(409, 'Confirmá el pedido antes de asignar el envío');
-  }
-  if (pedido.envio) {
-    throw new HttpError(409, 'El pedido ya tiene un envío asignado');
-  }
-
-  const repartidor = await repartidorRepository.findOne(datos.repartidorId);
-  if (!repartidor) throw new HttpError(404, 'Repartidor no encontrado');
-  if (!repartidor.estado) {
-    throw new HttpError(400, 'El repartidor seleccionado no está activo');
-  }
-
-  const envio = new Envio();
-  envio.costo = datos.costo;
-  envio.monto_propina = 0;
-  envio.pedido = pedido;
-  await envioRepository.add(envio);
-
-  const actualizado = await repository.update(pedidoId, { repartidor, estado: 'En camino' });
-  if (!actualizado) throw new HttpError(404, 'Pedido no encontrado');
-
-  const pedidoCompleto = await repository.findOne(pedidoId);
-  if (!pedidoCompleto) throw new HttpError(404, 'Pedido no encontrado');
-  return pedidoCompleto;
+  return repository.asignarEnvioConRepartidor(pedidoId, datos.repartidorId, datos.costo);
 }
 
 export async function eliminarPedido(id: number): Promise<void> {
