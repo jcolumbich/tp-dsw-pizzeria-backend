@@ -8,11 +8,11 @@ export const orm = await MikroORM.init({
   dbName: process.env.DB_NAME || 'pizzeria',
   clientUrl: process.env.DB_URL || 'mysql://root:1234@localhost:3306/pizzeria',
   driver: MySqlDriver,
-  debug: true,
+  debug: process.env.NODE_ENV === 'development',
   schemaGenerator: {
     disableForeignKeys: true,
-    createForeignKeyConstraints: true,
-  },
+    createForeignKeyConstraints: true
+  }
 });
 
 export const syncSchema = async () => {

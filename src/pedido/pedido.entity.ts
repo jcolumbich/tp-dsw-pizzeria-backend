@@ -1,9 +1,10 @@
-import { Entity, Property, OneToMany, OneToOne, ManyToOne, Collection, Rel, Cascade } from '@mikro-orm/core';
+import {Entity,Property, OneToMany,OneToOne, ManyToOne, Collection,Rel, Cascade,} from '@mikro-orm/core';
 import { BaseEntity } from '../shared/db/base.entity.js';
 import { DetallePedido } from '../detalle-pedido/detalle-pedido.entity.js';
 import { Envio } from '../envio/envio.entity.js';
 import { Repartidor } from '../repartidor/repartidor.entity.js';
 import { Cliente } from '../cliente/cliente.entity.js';
+import { DecimalNumberType } from '../shared/db/decimal-number.type.js';
 
 export interface ConsumoIngredientePedido {
   ingredienteId: number;
@@ -15,10 +16,10 @@ export class Pedido extends BaseEntity {
   @Property({ type: 'Date' })
   dia: Date = new Date();
 
-  @Property({ type: 'number' })
+  @Property({ type: new DecimalNumberType(14, 2) })
   total: number = 0;
 
-  @Property({ type: 'double', default: 0 })
+  @Property({ type: new DecimalNumberType(14, 2), default: 0 })
   monto_propina: number = 0;
 
   @Property({ type: 'boolean' })

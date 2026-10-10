@@ -6,7 +6,13 @@ export interface ItemParaTotal {
 }
 
 export function calcularTotalPedido(items: ItemParaTotal[]): number {
-  return items.reduce((total, item) => total + item.cantidad * item.precioUnitario, 0);
+  const totalCentavos = items.reduce(
+    (centavos, item) =>
+      centavos + item.cantidad * Math.round(item.precioUnitario * 100),
+    0
+  );
+
+  return totalCentavos / 100;
 }
 
 export interface PizzaParaValidar {
@@ -16,6 +22,9 @@ export interface PizzaParaValidar {
 
 export function validarPizzaDisponible(pizza: PizzaParaValidar): void {
   if (!pizza.disponible) {
-    throw new HttpError(400, `La pizza "${pizza.nombre}" no está disponible`);
+    throw new HttpError(
+      400,
+      `La pizza "${pizza.nombre}" no está disponible`
+    );
   }
 }

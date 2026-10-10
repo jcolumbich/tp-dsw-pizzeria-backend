@@ -10,7 +10,8 @@
     "start": "node ./dist/app.js",
     "start:dev": "tsc-watch --noClear -p ./tsconfig.json --onSuccess \"node ./dist/app.js\"",
     "test": "tsc --build tsconfig.json --force && node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
-    "test:watch": "tsc --build tsconfig.json --force && node --experimental-vm-modules node_modules/jest/bin/jest.js --watchAll --runInBand"
+    "test:watch": "tsc --build tsconfig.json --force && node --experimental-vm-modules node_modules/jest/bin/jest.js --watchAll --runInBand",
+    "test:unit": "tsc --build tsconfig.json --force && node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --testPathIgnorePatterns=integration"
   },
   "keywords": [],
   "author": "",

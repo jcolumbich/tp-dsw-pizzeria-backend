@@ -11,6 +11,7 @@ import { IngredientePizza } from '../ingrediente-pizza/ingrediente-pizza.entity.
 import { Repository } from '../shared/repository.js';
 import { HttpError } from '../shared/http-error.js';
 import { calcularTotalPedido, validarPizzaDisponible } from './pedido.logic.js';
+import { redondearStock } from '../shared/numero.schema.js';
 
 export interface ItemPedidoInput {
   pizzaId: number;
@@ -20,10 +21,8 @@ export interface ItemPedidoInput {
 export class PedidoRepository implements Repository<Pedido> {
   async findAll(estado?: string, clienteId?: number): Promise<Pedido[]> {
     const filtro: any = {};
-
     if (estado) filtro.estado = estado;
     if (clienteId !== undefined) filtro.cliente = clienteId;
-
     return orm.em.find(Pedido, filtro, {
       populate: ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio'],
       orderBy: { dia: 'DESC' }
@@ -44,36 +43,26 @@ export class PedidoRepository implements Repository<Pedido> {
 
   async addConItems(retiro: boolean, clienteId: number, items: ItemPedidoInput[], montoPropina: number = 0): Promise<Pedido> {
     return orm.em.transactional(async (em) => {
-      const cliente = await em.findOne(Cliente, { id: clienteId });
-
-      if (!cliente) {
-        throw new HttpError(404, `No existe un cliente con id ${clienteId}`);
-      }
-
-      if (!cliente.estado) {
-        throw new HttpError(400, 'El cliente se encuentra dado de baja');
-      }
+      const cliente = await em.findOne(Cliente, { id: clienteId }, {
+        lockMode: LockMode.PESSIMISTIC_WRITE,
+        refresh: true
+      });
+      if (!cliente) throw new HttpError(404, `No existe un cliente con id ${clienteId}`);
+      if (!cliente.estado) throw new HttpError(400, 'El cliente se encuentra dado de baja');
 
       const pizzaIds = items.map((item) => item.pizzaId);
-      const pizzas = await em.find(Pizza, { id: { $in: pizzaIds } });
+      const pizzas = await em.find(Pizza, { id: { $in: pizzaIds }, eliminada: false });
       const pizzasPorId = new Map(pizzas.map((pizza) => [pizza.id, pizza]));
-
       for (const item of items) {
         const pizza = pizzasPorId.get(item.pizzaId);
-
-        if (!pizza) {
-          throw new HttpError(404, `No existe una pizza con id ${item.pizzaId}`);
-        }
-
+        if (!pizza) throw new HttpError(404, `No existe una pizza con id ${item.pizzaId}`);
         validarPizzaDisponible(pizza);
       }
 
       const recetas = await em.find(IngredientePizza, { pizza: { $in: pizzaIds } }, {
         populate: ['pizza', 'ingrediente']
       });
-
       const recetasPorPizza = new Map<number, IngredientePizza[]>();
-
       for (const receta of recetas) {
         const pizzaId = receta.pizza.id;
         const recetasDePizza = recetasPorPizza.get(pizzaId) ?? [];
@@ -82,48 +71,37 @@ export class PedidoRepository implements Repository<Pedido> {
       }
 
       const cantidadesNecesarias = new Map<number, number>();
-
       for (const item of items) {
         const pizza = pizzasPorId.get(item.pizzaId)!;
         const recetasDePizza = recetasPorPizza.get(item.pizzaId) ?? [];
-
         if (recetasDePizza.length === 0) {
           throw new HttpError(400, `La pizza "${pizza.nombre}" no tiene ingredientes cargados`);
         }
-
         for (const receta of recetasDePizza) {
           const ingredienteId = receta.ingrediente.id;
-          const cantidadNecesaria = receta.cantidad * item.cantidad;
+          const cantidadNecesaria = redondearStock(receta.cantidad * item.cantidad);
           const cantidadAcumulada = cantidadesNecesarias.get(ingredienteId) ?? 0;
-          cantidadesNecesarias.set(ingredienteId, cantidadAcumulada + cantidadNecesaria);
+          cantidadesNecesarias.set(ingredienteId, redondearStock(cantidadAcumulada + cantidadNecesaria));
         }
       }
 
       const ingredienteIds = [...cantidadesNecesarias.keys()].sort((a, b) => a - b);
-
       const ingredientes = await em.find(Ingrediente, { id: { $in: ingredienteIds } }, {
         lockMode: LockMode.PESSIMISTIC_WRITE,
         orderBy: { id: 'ASC' },
         refresh: true
       });
-
       const ingredientesPorId = new Map(ingredientes.map((ingrediente) => [ingrediente.id, ingrediente]));
-
       for (const [ingredienteId, cantidadNecesaria] of cantidadesNecesarias) {
         const ingrediente = ingredientesPorId.get(ingredienteId);
-
-        if (!ingrediente) {
-          throw new HttpError(404, `No existe el ingrediente con id ${ingredienteId}`);
-        }
-
+        if (!ingrediente) throw new HttpError(404, `No existe el ingrediente con id ${ingredienteId}`);
         if (ingrediente.stock < cantidadNecesaria) {
           throw new HttpError(409, `Stock insuficiente de "${ingrediente.nombre}". Disponible: ${ingrediente.stock}. Necesario: ${cantidadNecesaria}`);
         }
       }
-
       for (const [ingredienteId, cantidadNecesaria] of cantidadesNecesarias) {
         const ingrediente = ingredientesPorId.get(ingredienteId)!;
-        ingrediente.stock -= cantidadNecesaria;
+        ingrediente.stock = redondearStock(ingrediente.stock - cantidadNecesaria);
       }
 
       const pedido = em.create(Pedido, {
@@ -138,39 +116,28 @@ export class PedidoRepository implements Repository<Pedido> {
           cantidad
         }))
       });
-
       em.persist(pedido);
-
       const detallesCreados: { pizza: Pizza; cantidad: number }[] = [];
-
       for (const item of items) {
         const pizza = pizzasPorId.get(item.pizzaId)!;
-
         const detalleData = {
           pedido,
           pizza,
-          cantidad: item.cantidad
+          cantidad: item.cantidad,
+          precio_unitario: pizza.precio
         } as Omit<RequiredEntityData<DetallePedido>, 'subtotal'>;
-
         const detalle = em.create(DetallePedido, detalleData as RequiredEntityData<DetallePedido>);
         em.persist(detalle);
         detallesCreados.push({ pizza, cantidad: item.cantidad });
       }
-
       pedido.total = calcularTotalPedido(
         detallesCreados.map(({ pizza, cantidad }) => ({ cantidad, precioUnitario: pizza.precio }))
       );
-
       await em.flush();
-
       const pedidoCompleto = await em.findOne(Pedido, { id: pedido.id }, {
         populate: ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio']
       });
-
-      if (!pedidoCompleto) {
-        throw new Error('No se pudo recuperar el pedido creado');
-      }
-
+      if (!pedidoCompleto) throw new Error('No se pudo recuperar el pedido creado');
       return pedidoCompleto;
     });
   }
@@ -179,18 +146,15 @@ export class PedidoRepository implements Repository<Pedido> {
     const pedido = await orm.em.findOne(Pedido, { id }, {
       populate: ['detalles', 'detalles.pizza']
     });
-
     if (!pedido) return null;
-
-    pedido.total = calcularTotalPedido(
-      pedido.detalles.getItems().map((detalle) => ({
-        cantidad: detalle.cantidad,
-        precioUnitario: detalle.pizza.precio,
-      }))
-    );
-
+    const items = pedido.detalles.getItems().map((detalle) => {
+      if (detalle.precio_unitario == null) {
+        throw new HttpError(409, 'Este pedido anterior no tiene el precio histórico registrado. No se puede recalcular automáticamente.');
+      }
+      return { cantidad: detalle.cantidad, precioUnitario: detalle.precio_unitario };
+    });
+    pedido.total = calcularTotalPedido(items);
     await orm.em.flush();
-
     return pedido;
   }
 
@@ -198,12 +162,9 @@ export class PedidoRepository implements Repository<Pedido> {
     const pedido = await orm.em.findOne(Pedido, { id }, {
       populate: ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio']
     });
-
     if (!pedido) return null;
-
     orm.em.assign(pedido, item);
     await orm.em.flush();
-
     return pedido;
   }
 
@@ -213,46 +174,32 @@ export class PedidoRepository implements Repository<Pedido> {
         lockMode: LockMode.PESSIMISTIC_WRITE,
         refresh: true
       });
-
       if (!pedido) throw new HttpError(404, 'Pedido no encontrado');
       if (pedido.retiro) {
         throw new HttpError(400, 'No se puede asignar un envío a un pedido con retiro en el local');
       }
-
-      const envioExistente = await em.findOne(Envio, { pedido: pedidoId }, {
-        refresh: true
-      });
-
-      if (envioExistente) {
-        throw new HttpError(409, 'El pedido ya tiene un envío asignado');
-      }
+      const envioExistente = await em.findOne(Envio, { pedido: pedidoId }, { refresh: true });
+      if (envioExistente) throw new HttpError(409, 'El pedido ya tiene un envío asignado');
       if (pedido.estado !== 'En preparación') {
         throw new HttpError(409, 'Confirmá el pedido antes de asignar el envío');
       }
-
       const repartidor = await em.findOne(Repartidor, { id: repartidorId }, {
         lockMode: LockMode.PESSIMISTIC_WRITE,
         refresh: true
       });
-
       if (!repartidor) throw new HttpError(404, 'Repartidor no encontrado');
-      if (!repartidor.estado) {
-        throw new HttpError(400, 'El repartidor seleccionado no está activo');
-      }
-
+      if (!repartidor.estado) throw new HttpError(400, 'El repartidor seleccionado no está activo');
       const envio = em.create(Envio, {
         costo,
         monto_propina: montoPropina ?? pedido.monto_propina ?? 0,
         pedido
       });
-
       pedido.envio = envio;
       pedido.monto_propina = envio.monto_propina ?? 0;
       pedido.repartidor = repartidor;
       pedido.estado = 'En camino';
       em.persist(envio);
       await em.flush();
-
       await em.populate(pedido, ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio']);
       return pedido;
     });
@@ -264,57 +211,44 @@ export class PedidoRepository implements Repository<Pedido> {
         lockMode: LockMode.PESSIMISTIC_WRITE,
         refresh: true
       });
-
       if (!pedido) return null;
-
       await em.populate(pedido, ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio']);
-
       if (pedido.estado === 'Entregado') return pedido;
-      if (pedido.estado === 'Cancelado') {
-        throw new HttpError(409, 'No se puede entregar un pedido cancelado');
-      }
-
+      if (pedido.estado === 'Cancelado') throw new HttpError(409, 'No se puede entregar un pedido cancelado');
       const estadoEsperado = pedido.retiro ? 'En preparación' : 'En camino';
       if (pedido.estado !== estadoEsperado) {
         throw new HttpError(409, pedido.retiro
           ? 'El pedido debe estar en preparación antes de confirmar el retiro'
           : 'El pedido debe estar en camino antes de confirmar la entrega');
       }
-
       if (!pedido.retiro && (!pedido.envio || !pedido.repartidor)) {
         throw new HttpError(409, 'El pedido debe tener un envío y un repartidor asignados');
       }
-
       pedido.estado = 'Entregado';
       await em.flush();
       return pedido;
     });
   }
 
-  async delete(id: number): Promise<boolean> {
+  async confirmarConBloqueo(id: number): Promise<Pedido | null> {
     return orm.em.transactional(async (em) => {
       const pedido = await em.findOne(Pedido, { id }, {
-        populate: ['detalles', 'envio'],
-        lockMode: LockMode.PESSIMISTIC_WRITE
+        lockMode: LockMode.PESSIMISTIC_WRITE,
+        refresh: true
       });
-
-      if (!pedido) {
-        return false;
+      if (!pedido) return null;
+      if (pedido.estado !== 'Pendiente' && pedido.estado !== 'En preparación') {
+        throw new HttpError(409, 'Solo se puede confirmar un pedido pendiente');
       }
-
-      if (pedido.estado !== 'Cancelado') {
-        throw new HttpError(409, 'Solo se puede eliminar un pedido en estado Cancelado (su stock ya fue repuesto al cancelarlo)');
-      }
-
-      if (pedido.envio) {
-        em.remove(pedido.envio);
-      }
-
-      em.remove(pedido);
+      pedido.estado = 'En preparación';
       await em.flush();
-
-      return true;
+      await em.populate(pedido, ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio']);
+      return pedido;
     });
+  }
+
+  async delete(id: number): Promise<boolean> {
+    return (await this.cancelarConReposicion(id)) !== null;
   }
 
   async cancelarConReposicion(id: number): Promise<Pedido | null> {
@@ -324,18 +258,15 @@ export class PedidoRepository implements Repository<Pedido> {
         lockMode: LockMode.PESSIMISTIC_WRITE,
         refresh: true
       });
-
       if (!pedido) return null;
       if (pedido.estado === 'Cancelado') return pedido;
       if (pedido.estado === 'Entregado') {
         throw new HttpError(409, 'No se puede cancelar un pedido que ya fue entregado');
       }
-
       const consumos = pedido.consumoIngredientes;
       if (!Array.isArray(consumos) || consumos.length === 0) {
         throw new HttpError(409, 'Este pedido anterior no tiene el consumo de ingredientes registrado. No se puede reponer su stock automáticamente: requiere una revisión manual.');
       }
-
       const cantidadesAReponer = new Map<number, number>();
       for (const consumo of consumos) {
         if (!consumo || !Number.isSafeInteger(consumo.ingredienteId) || consumo.ingredienteId <= 0 ||
@@ -344,7 +275,6 @@ export class PedidoRepository implements Repository<Pedido> {
         }
         cantidadesAReponer.set(consumo.ingredienteId, consumo.cantidad);
       }
-
       const ingredienteIds = [...cantidadesAReponer.keys()].sort((a, b) => a - b);
       const ingredientes = await em.find(Ingrediente, { id: { $in: ingredienteIds } }, {
         lockMode: LockMode.PESSIMISTIC_WRITE,
@@ -352,17 +282,15 @@ export class PedidoRepository implements Repository<Pedido> {
         refresh: true
       });
       const ingredientesPorId = new Map(ingredientes.map((ingrediente) => [ingrediente.id, ingrediente]));
-
       for (const ingredienteId of cantidadesAReponer.keys()) {
         if (!ingredientesPorId.has(ingredienteId)) {
           throw new HttpError(409, `No se puede reponer el ingrediente con id ${ingredienteId} porque ya no existe`);
         }
       }
-
       for (const [ingredienteId, cantidadAReponer] of cantidadesAReponer) {
-        ingredientesPorId.get(ingredienteId)!.stock += cantidadAReponer;
+        const ingrediente = ingredientesPorId.get(ingredienteId)!;
+        ingrediente.stock = redondearStock(ingrediente.stock + cantidadAReponer);
       }
-
       pedido.estado = 'Cancelado';
       pedido.repartidor = undefined;
       await em.flush();

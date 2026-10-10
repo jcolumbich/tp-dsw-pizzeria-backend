@@ -1,6 +1,7 @@
 import { Entity, Property, ManyToOne, Rel } from '@mikro-orm/core';
 import { Pizza } from '../pizza/pizza.entity.js';
 import { Ingrediente } from '../ingrediente/ingrediente.entity.js';
+import { DecimalNumberType } from '../shared/db/decimal-number.type.js';
 
 @Entity()
 export class IngredientePizza {
@@ -10,6 +11,6 @@ export class IngredientePizza {
   @ManyToOne(() => Ingrediente, { primary: true })
   ingrediente!: Rel<Ingrediente>;
 
-  @Property({ type: 'double' })
+  @Property({ type: new DecimalNumberType(16, 4) })
   cantidad!: number;
 }

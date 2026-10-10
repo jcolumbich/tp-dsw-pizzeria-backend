@@ -23,15 +23,12 @@ export async function crearPedido(retiro: unknown, clienteId: unknown, items: un
   }
   const datos = resultado.data;
   const itemsAgrupados = new Map<number, number>();
-
   for (const item of datos.items) {
     itemsAgrupados.set(item.pizzaId, (itemsAgrupados.get(item.pizzaId) ?? 0) + item.cantidad);
   }
-
   const itemsPedido: ItemPedidoInput[] = [...itemsAgrupados.entries()].map(
     ([pizzaId, cantidad]) => ({ pizzaId, cantidad })
   );
-
   return repository.addConItems(datos.retiro, datos.clienteId, itemsPedido, datos.monto_propina);
 }
 
@@ -41,35 +38,20 @@ export async function actualizarPedido(id: number, entrada: Partial<{ retiro: bo
     throw new HttpError(400, resultado.error.issues[0]?.message ?? 'Solo se puede actualizar el estado del pedido');
   }
   const datos = resultado.data;
-
   if (datos.estado === 'Entregado') {
     const pedidoEntregado = await repository.marcarEntregado(id);
     if (!pedidoEntregado) throw new HttpError(404, 'Pedido no encontrado');
     return pedidoEntregado;
   }
-
-  const pedidoActual = await repository.findOne(id);
-  if (!pedidoActual) throw new HttpError(404, 'Pedido no encontrado');
-  if (pedidoActual.estado === 'Entregado') {
-    throw new HttpError(409, 'No se puede modificar un pedido entregado anteriormente');
-  }
-
-  if (pedidoActual.estado === 'Cancelado') {
-    if (datos.estado === 'Cancelado') return pedidoActual;
-    throw new HttpError(409, 'Un pedido cancelado no puede volver a modificarse');
-  }
-
   if (datos.estado === 'Cancelado') {
     const pedidoCancelado = await repository.cancelarConReposicion(id);
     if (!pedidoCancelado) throw new HttpError(404, 'Pedido no encontrado');
     return pedidoCancelado;
   }
-
-  if (pedidoActual.estado !== 'Pendiente' || datos.estado !== 'En preparación') {
-    throw new HttpError(409, 'Solo se puede confirmar un pedido pendiente');
+  if (datos.estado !== 'En preparación') {
+    throw new HttpError(409, 'Para pasar un pedido a En camino tenés que asignar su envío');
   }
-
-  const pedido = await repository.update(id, { estado: 'En preparación' });
+  const pedido = await repository.confirmarConBloqueo(id);
   if (!pedido) throw new HttpError(404, 'Pedido no encontrado');
   return pedido;
 }
@@ -80,7 +62,6 @@ export async function asignarEnvio(pedidoId: number, repartidorId: number, costo
     throw new HttpError(400, resultado.error.issues[0]?.message ?? 'Datos de envío inválidos');
   }
   const datos = resultado.data;
-
   return repository.asignarEnvioConRepartidor(pedidoId, datos.repartidorId, datos.costo);
 }
 
