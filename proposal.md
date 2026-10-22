@@ -38,10 +38,6 @@ https://drive.google.com/file/d/1xWHBcCBiaYEYtk39Oxa8nYyFgnX6Xuhz/view?usp=shari
 | Listado<br>+<br>detalle | 1. Listado de pedidos filtrado por estado (ej. "Pendiente"), muestra nro de pedido, fecha y total => detalle muestra los ítems (pizzas, cantidades, precio total ítems) y datos del cliente. |
 | CUU/Epic | 1. Registrar un nuevo pedido para un cliente con sus respectivos ítems. |
 
-> **TODO:** la relación Pizza-Ingrediente no quedó implementada como una dependencia directa,
-> sino a través de una entidad intermedia propia, `IngredientePizza` (N a N, con `cantidad`),
-> que tiene su propio CRUD completo (`src/ingrediente-pizza/`, rutas bajo `/api/ingrediente-pizza`).
-> Conviene aclarar esto en la fila de "CRUD dependiente".
 
 ---
 
