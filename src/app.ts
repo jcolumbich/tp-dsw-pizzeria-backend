@@ -22,6 +22,7 @@ import {
   importarImagenesLocales,
   servirImagenPizza,
 } from './pizza/pizza.imagen.js';
+import { revisarComprasPendientes } from './pago/pago.service.js';
 import { pagoRouter } from './pago/pago.routes.js';
 
 export const app = express();
@@ -134,6 +135,17 @@ app.use((_req, res) => {
 });
 
 if (process.env.JEST_WORKER_ID === undefined) {
+  let revisando = false;
+  const revisar = async () => {
+    if (revisando) return;
+    revisando = true;
+    try { await RequestContext.createAsync(orm.em, revisarComprasPendientes); }
+    catch (error) { console.error('No se pudieron revisar las compras vencidas:', error instanceof Error ? error.message : 'Error'); }
+    finally { revisando = false; }
+  };
+  const intervalo = setInterval(() => { void revisar(); }, 60_000);
+  intervalo.unref();
+  void revisar();
   const port = Number(process.env.PORT || 3000);
 
   app.listen(port, () => {

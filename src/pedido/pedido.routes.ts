@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { findAll, findOne, add, update, remove, asignarEnvio } from './pedido.controller.js';
+import { findAll, findOne, add, update, remove, asignarEnvio, consultarTarifa } from './pedido.controller.js';
 import { requiereNivel } from '../auth/auth.middleware.js';
 import { validarConSchema } from '../shared/validar-schema.js';
 import { crearPedidoSchema, actualizarPedidoSchema, asignarEnvioSchema } from './pedido.schema.js';
@@ -7,6 +7,7 @@ import { crearPedidoSchema, actualizarPedidoSchema, asignarEnvioSchema } from '.
 export const pedidoRouter = Router();
 
 pedidoRouter.get('/', findAll);
+pedidoRouter.get('/tarifa-envio', consultarTarifa);
 pedidoRouter.get('/:id', findOne);
 
 pedidoRouter.post('/', (req, res, next) => {

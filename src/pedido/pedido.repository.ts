@@ -1,4 +1,7 @@
-import { RequiredEntityData, EntityData, LockMode } from '@mikro-orm/core';
+import { RequiredEntityData, EntityData, LockMode, EntityManager, wrap } from '@mikro-orm/core';
+import { Pago } from '../pago/pago.entity.js';
+import { estadoPago, centavos } from '../pago/pago.logic.js';
+import { tarifaEnvio } from './pedido.checkout.js';
 import { orm } from '../shared/db/orm.js';
 import { Pedido } from './pedido.entity.js';
 import { Pizza } from '../pizza/pizza.entity.js';
@@ -19,6 +22,15 @@ export interface ItemPedidoInput {
 }
 
 export class PedidoRepository implements Repository<Pedido> {
+  serializar(pedido: Pedido) { return wrap(pedido).toObject(); }
+
+  private async validarPago(em: EntityManager, pedido: Pedido): Promise<void> {
+    const pago = await em.findOne(Pago, { pedido: pedido.id }, { refresh: true });
+    if ((pedido.medio_pago === 'mercadopago' || pago) && estadoPago(pago?.movimientos) !== 'aprobado') {
+      throw new HttpError(409, 'El pago debe estar aprobado antes de preparar o entregar el pedido');
+    }
+  }
+
   async findAll(estado?: string, clienteId?: number): Promise<Pedido[]> {
     const filtro: any = {};
     if (estado) filtro.estado = estado;
@@ -41,7 +53,7 @@ export class PedidoRepository implements Repository<Pedido> {
     return pedido;
   }
 
-  async addConItems(retiro: boolean, clienteId: number, items: ItemPedidoInput[], montoPropina: number = 0): Promise<Pedido> {
+  async addConItems(retiro: boolean, clienteId: number, items: ItemPedidoInput[], montoPropina: number = 0, medioPago: 'efectivo' | 'mercadopago' = 'efectivo', checkoutId?: string, costoEsperado?: number): Promise<Pedido> {
     return orm.em.transactional(async (em) => {
       const cliente = await em.findOne(Cliente, { id: clienteId }, {
         lockMode: LockMode.PESSIMISTIC_WRITE,
@@ -50,6 +62,20 @@ export class PedidoRepository implements Repository<Pedido> {
       if (!cliente) throw new HttpError(404, `No existe un cliente con id ${clienteId}`);
       if (!cliente.estado) throw new HttpError(400, 'El cliente se encuentra dado de baja');
 
+      // El bloqueo del cliente serializa reintentos de la misma compra.
+      if (checkoutId) {
+        const anterior = await em.findOne(Pedido, { checkout_id: checkoutId }, {
+          populate: ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio'], refresh: true
+        });
+        if (anterior) {
+          if (anterior.cliente?.id !== clienteId) throw new HttpError(409, 'La compra ya existe');
+          return anterior;
+        }
+      }
+      const costoEnvio = retiro ? 0 : tarifaEnvio();
+      if (costoEsperado !== undefined && centavos(costoEsperado) !== centavos(costoEnvio)) {
+        throw new HttpError(409, 'La tarifa de envío cambió. Recargá la página antes de confirmar');
+      }
       const pizzaIds = items.map((item) => item.pizzaId);
       const pizzas = await em.find(Pizza, { id: { $in: pizzaIds }, eliminada: false });
       const pizzasPorId = new Map(pizzas.map((pizza) => [pizza.id, pizza]));
@@ -107,7 +133,11 @@ export class PedidoRepository implements Repository<Pedido> {
       const pedido = em.create(Pedido, {
         retiro,
         cliente,
-        estado: 'Pendiente',
+        estado: medioPago === 'mercadopago' ? 'Esperando pago' : 'Pendiente',
+        medio_pago: medioPago,
+        costo_envio: costoEnvio,
+        checkout_id: checkoutId,
+        vence_pago: medioPago === 'mercadopago' ? new Date(Date.now() + 30 * 60_000) : undefined,
         dia: new Date(),
         total: 0,
         monto_propina: montoPropina,
@@ -175,6 +205,13 @@ export class PedidoRepository implements Repository<Pedido> {
         refresh: true
       });
       if (!pedido) throw new HttpError(404, 'Pedido no encontrado');
+      await this.validarPago(em, pedido);
+      if (pedido.costo_envio != null && centavos(costo) !== centavos(pedido.costo_envio)) {
+        throw new HttpError(409, 'El costo del envío ya quedó fijado al comprar');
+      }
+      if (pedido.medio_pago && montoPropina !== undefined && centavos(montoPropina) !== centavos(pedido.monto_propina)) {
+        throw new HttpError(409, 'La propina ya quedó fijada al comprar');
+      }
       if (pedido.retiro) {
         throw new HttpError(400, 'No se puede asignar un envío a un pedido con retiro en el local');
       }
@@ -213,6 +250,7 @@ export class PedidoRepository implements Repository<Pedido> {
       });
       if (!pedido) return null;
       await em.populate(pedido, ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio']);
+      await this.validarPago(em, pedido);
       if (pedido.estado === 'Entregado') return pedido;
       if (pedido.estado === 'Cancelado') throw new HttpError(409, 'No se puede entregar un pedido cancelado');
       const estadoEsperado = pedido.retiro ? 'En preparación' : 'En camino';
@@ -237,6 +275,7 @@ export class PedidoRepository implements Repository<Pedido> {
         refresh: true
       });
       if (!pedido) return null;
+      await this.validarPago(em, pedido);
       if (pedido.estado !== 'Pendiente' && pedido.estado !== 'En preparación') {
         throw new HttpError(409, 'Solo se puede confirmar un pedido pendiente');
       }
@@ -251,7 +290,7 @@ export class PedidoRepository implements Repository<Pedido> {
     return (await this.cancelarConReposicion(id)) !== null;
   }
 
-  async cancelarConReposicion(id: number): Promise<Pedido | null> {
+  async cancelarConReposicion(id: number, soloVencido = false): Promise<Pedido | null> {
     return orm.em.transactional(async (em) => {
       const pedido = await em.findOne(Pedido, { id }, {
         populate: ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio'],
@@ -259,6 +298,11 @@ export class PedidoRepository implements Repository<Pedido> {
         refresh: true
       });
       if (!pedido) return null;
+      if (soloVencido) {
+        if (pedido.estado !== 'Esperando pago' || !pedido.vence_pago || pedido.vence_pago.getTime() + 120_000 > Date.now()) return pedido;
+        const pago = await em.findOne(Pago, { pedido: id }, { refresh: true });
+        if (!['sin_pagar', 'rechazado'].includes(estadoPago(pago?.movimientos))) return pedido;
+      }
       if (pedido.estado === 'Cancelado') return pedido;
       if (pedido.estado === 'Entregado') {
         throw new HttpError(409, 'No se puede cancelar un pedido que ya fue entregado');

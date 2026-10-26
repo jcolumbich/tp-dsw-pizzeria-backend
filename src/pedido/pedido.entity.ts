@@ -28,6 +28,19 @@ export class Pedido extends BaseEntity {
   @Property({ type: 'string' })
   estado: string = 'Pendiente';
 
+  // Nulos en pedidos anteriores: no se inventa su forma de pago.
+  @Property({ type: 'string', nullable: true })
+  medio_pago?: 'efectivo' | 'mercadopago';
+
+  @Property({ type: new DecimalNumberType(14, 2), nullable: true })
+  costo_envio?: number;
+
+  @Property({ type: 'string', nullable: true, unique: true, hidden: true })
+  checkout_id?: string;
+
+  @Property({ type: 'Date', nullable: true })
+  vence_pago?: Date;
+
   @Property({ type: 'json', nullable: true, hidden: true })
   consumoIngredientes?: ConsumoIngredientePedido[] | null;
 
@@ -38,10 +51,10 @@ export class Pedido extends BaseEntity {
   detalles = new Collection<DetallePedido>(this);
 
   @OneToOne(() => Envio, (envio) => envio.pedido, { nullable: true })
-  envio?: Envio;
+  envio?: Rel<Envio>;
 
   @ManyToOne(() => Repartidor, { nullable: true })
-  repartidor?: Repartidor;
+  repartidor?: Rel<Repartidor>;
 
   @ManyToOne(() => Cliente, { nullable: true })
   cliente?: Rel<Cliente>;

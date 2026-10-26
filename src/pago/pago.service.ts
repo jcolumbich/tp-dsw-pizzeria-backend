@@ -1,3 +1,4 @@
+import { PedidoRepository } from '../pedido/pedido.repository.js';
 import { randomUUID } from 'node:crypto';
 import type { UsuarioToken } from '../auth/auth.middleware.js';
 import type { Pedido } from '../pedido/pedido.entity.js';
@@ -11,11 +12,13 @@ import {
 import {
   conPedido,
   buscarPorReferencia,
+  pedidosPorConciliar,
 } from './pago.repository.js';
 import {
   consultarMP,
   urlPublica,
   variable,
+  validarVendedorPrueba,
 } from './mercadopago.client.js';
 
 interface PreferenciaMP {
@@ -34,11 +37,6 @@ interface RespuestaPagoMP {
   transaction_amount_refunded?: number;
   status: string;
   date_last_updated: string;
-}
-
-interface UsuarioMercadoPago {
-  id?: number | string;
-  tags?: string[];
 }
 
 function autorizar(
@@ -62,7 +60,7 @@ function autorizar(
 }
 
 function importePedido(pedido: Pedido): number {
-  if (!pedido.retiro && !pedido.envio) {
+  if (!pedido.retiro && pedido.costo_envio == null && !pedido.envio) {
     throw new HttpError(
       409,
       'El envío todavía no tiene un costo confirmado',
@@ -75,7 +73,7 @@ function importePedido(pedido: Pedido): number {
       pedido.monto_propina ??
       0;
 
-  const envio = pedido.retiro ? 0 : pedido.envio!.costo;
+  const envio = pedido.retiro ? 0 : pedido.costo_envio ?? pedido.envio?.costo ?? 0;
 
   const importe =
     (
@@ -110,88 +108,24 @@ function estadoActual(
   return estado;
 }
 
-async function validarEntornoDePrueba(
-  recibido: RespuestaPagoMP,
-  vendedorConfigurado: string,
-): Promise<void> {
-  if (variable('MP_MODO') !== 'prueba') {
-    throw new HttpError(
-      409,
-      'Esta integración está habilitada únicamente para pruebas',
-    );
-  }
-
-  if (String(recibido.collector_id) !== vendedorConfigurado) {
-    throw new HttpError(
-      409,
-      'El vendedor del pago no coincide con MP_VENDEDOR_PRUEBA_ID',
-    );
-  }
-
-  if (recibido.live_mode === false) {
-    return;
-  }
-
-  // Si live_mode no es false, verificamos que el dueño
-  // del token sea el vendedor configurado y una cuenta de prueba.
-  const respuestaUsuario = await fetch(
-    'https://api.mercadolibre.com/users/me',
-    {
-      headers: {
-        Authorization: `Bearer ${variable('MP_ACCESS_TOKEN')}`,
-      },
-      signal: AbortSignal.timeout(10000),
-    },
-  );
-
-  if (!respuestaUsuario.ok) {
-    throw new HttpError(
-      502,
-      `No se pudo comprobar la cuenta de prueba del vendedor: HTTP ${respuestaUsuario.status}`,
-    );
-  }
-
-  const vendedor =
-    (await respuestaUsuario.json()) as UsuarioMercadoPago;
-
-  const esVendedorDePrueba =
-    String(vendedor.id) === vendedorConfigurado &&
-    Array.isArray(vendedor.tags) &&
-    vendedor.tags.includes('test_user');
-
-  if (!esVendedorDePrueba) {
-    throw new HttpError(
-      409,
-      'El vendedor no pudo validarse como cuenta de prueba. El pago no se registró.',
-    );
-  }
-}
-
 export async function consultarEstado(
   id: number,
   usuario: UsuarioToken,
 ) {
-  return conPedido(id, async (pedido, em) => {
+  return conPedido(id, async (pedido, contexto) => {
     autorizar(pedido, usuario);
 
-    const pago = await em.findOne(
-      Pago,
-      { pedido: id },
-      { refresh: true },
-    );
+    const pago = await contexto.buscarPago();
 
     const estado = estadoActual(pago, pedido);
 
-    const puedePagar =
-      usuario.nivel_permisos === 0 &&
-      pedido.estado !== 'Cancelado' &&
-      (pedido.retiro || !!pedido.envio) &&
-      ['sin_pagar', 'rechazado'].includes(estado);
-
     return {
-      estado,
+      estado: pedido.medio_pago === 'efectivo' ? 'efectivo' : !pago && !pedido.medio_pago ? 'anterior' : estado,
       importe: pago?.importe ?? null,
-      puedePagar,
+      puedePagar: false,
+      estadoPedido: pedido.estado,
+      medioPago: pedido.medio_pago ?? null,
+      retiro: pedido.retiro,
     };
   });
 }
@@ -200,21 +134,18 @@ export async function crearPreferencia(
   id: number,
   usuario: UsuarioToken,
 ) {
-  return conPedido(id, async (pedido, em) => {
+  return conPedido(id, async (pedido, contexto) => {
     autorizar(pedido, usuario, true);
 
-    if (pedido.estado === 'Cancelado') {
+    if (pedido.medio_pago !== 'mercadopago' || pedido.estado !== 'Esperando pago' || !pedido.vence_pago || pedido.vence_pago.getTime() <= Date.now()) {
       throw new HttpError(
         409,
-        'El pedido está cancelado',
+        'Solo se puede abrir el checkout durante la compra y antes de su vencimiento',
       );
     }
 
-    let pago = await em.findOne(
-      Pago,
-      { pedido: id },
-      { refresh: true },
-    );
+    await validarVendedorPrueba();
+    let pago = await contexto.buscarPago();
 
     const estado = estadoActual(pago, pedido);
 
@@ -237,20 +168,19 @@ export async function crearPreferencia(
       );
     }
 
-    if (pago?.checkoutUrl) {
+    if (pago?.checkoutUrl && pago.preferenciaId) {
+      const retorno = `${urlPublica('FRONTEND_URL')}/mis-pedidos/${id}`;
+      await consultarMP(`/checkout/preferences/${encodeURIComponent(pago.preferenciaId)}`, {
+        back_urls: { success: retorno, pending: retorno, failure: retorno },
+        notification_url: `${urlPublica('BACKEND_URL')}/api/pagos/webhook`,
+      }, 'PUT');
       return {
         url: pago.checkoutUrl,
       };
     }
 
     if (!pago) {
-      pago = em.create(Pago, {
-        pedido,
-        referencia: randomUUID(),
-        importe,
-      });
-
-      em.persist(pago);
+      pago = contexto.crearPago(randomUUID(), importe);
     }
 
     const front = urlPublica('FRONTEND_URL');
@@ -297,12 +227,12 @@ export async function crearPreferencia(
         });
       }
 
-      if (pedido.envio!.costo > 0) {
+      if ((pedido.costo_envio ?? pedido.envio?.costo ?? 0) > 0) {
         items.push({
           id: 'envio',
           title: 'Envío',
           quantity: 1,
-          unit_price: pedido.envio!.costo,
+          unit_price: (pedido.costo_envio ?? pedido.envio?.costo ?? 0),
           currency_id: 'ARS',
         });
       }
@@ -331,6 +261,10 @@ export async function crearPreferencia(
           pending: retorno,
           failure: retorno,
         },
+        expires: true,
+        expiration_date_from: new Date().toISOString(),
+        expiration_date_to: pedido.vence_pago.toISOString(),
+        payment_methods: { excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }] },
         auto_return: 'approved',
         notification_url: `${back}/api/pagos/webhook`,
       },
@@ -389,15 +323,6 @@ export async function sincronizarPago(
   const vendedorConfigurado =
     variable('MP_VENDEDOR_PRUEBA_ID').trim();
 
-  // Diagnóstico temporal, sin tokens ni contraseñas.
-  console.log('Diagnóstico del pago:', {
-    idCoincide: String(recibido.id) === paymentId,
-    live_mode: recibido.live_mode,
-    vendedorRecibido: String(recibido.collector_id),
-    vendedorConfigurado,
-    estado: recibido.status,
-  });
-
   if (String(recibido.id) !== paymentId) {
     throw new HttpError(
       409,
@@ -405,10 +330,8 @@ export async function sincronizarPago(
     );
   }
 
-  await validarEntornoDePrueba(
-    recibido,
-    vendedorConfigurado,
-  );
+  if (String(recibido.collector_id) !== vendedorConfigurado) throw new HttpError(409, 'El vendedor del pago no coincide');
+  if (recibido.live_mode !== false) await validarVendedorPrueba(vendedorConfigurado);
 
   if (!recibido.external_reference) {
     throw new HttpError(
@@ -444,17 +367,14 @@ export async function sincronizarPago(
 
   await conPedido(
     encontrado.pedido.id,
-    async (pedido, em) => {
+    async (pedido, contexto) => {
       if (usuario) {
         autorizar(pedido, usuario);
       }
 
-      const pago = await em.findOneOrFail(
-        Pago,
-        encontrado.id,
-        { refresh: true },
-      );
+      const pago = await contexto.buscarPago();
 
+      if (!pago || pago.id !== encontrado.id) throw new HttpError(409, 'Referencia de pago inválida');
       const datosValidos =
         recibido.currency_id === 'ARS' &&
         centavos(recibido.transaction_amount) ===
@@ -482,7 +402,41 @@ export async function sincronizarPago(
         },
       );
 
-      // El pago no modifica la preparación ni el stock.
+      // Confirmar una sola vez; nunca revivir pedidos cancelados ni tocar stock.
+      if (pedido.medio_pago === 'mercadopago' && pedido.estado === 'Esperando pago' && estadoPago(pago.movimientos) === 'aprobado') {
+        pedido.estado = 'Pendiente';
+      }
     },
   );
+}
+
+async function reconciliarReferencia(referencia: string): Promise<void> {
+  let offset = 0;
+  let total = 0;
+  do {
+    const resultado = await consultarMP<{ results: { id: number }[]; paging: { total: number } }>(
+      `/v1/payments/search?external_reference=${encodeURIComponent(referencia)}&limit=50&offset=${offset}&sort=date_created&criteria=desc`
+    );
+    if (!Array.isArray(resultado.results) || !Number.isFinite(resultado.paging?.total)) {
+      throw new HttpError(502, 'No se pudo verificar el resultado de Mercado Pago');
+    }
+    for (const pago of resultado.results) await sincronizarPago(String(pago.id));
+    total = resultado.paging.total;
+    offset += resultado.results.length;
+    if (!resultado.results.length && offset < total) throw new HttpError(502, 'Consulta de pagos incompleta');
+  } while (offset < total);
+}
+
+export async function revisarComprasPendientes(): Promise<void> {
+  const pedidos = new PedidoRepository();
+  for (const id of await pedidosPorConciliar()) {
+    try {
+      const referencia = await conPedido(id, async (_pedido, contexto) => (await contexto.buscarPago())?.referencia);
+      // Si MP no responde, conservar la reserva y reintentar; no cancelar un pago desconocido.
+      if (referencia) await reconciliarReferencia(referencia);
+      await pedidos.cancelarConReposicion(id, true);
+    } catch (error) {
+      console.error(`No se pudo conciliar el pedido ${id}:`, error instanceof Error ? error.message : 'Error');
+    }
+  }
 }

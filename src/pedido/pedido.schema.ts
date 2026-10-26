@@ -40,10 +40,13 @@ const itemsPedidoSchema = z
 
 const pedidoInputSchema = z.strictObject({
   retiro: z.boolean(),
+  medio_pago: z.enum(['efectivo', 'mercadopago']).default('efectivo'),
+  checkout_id: z.uuid().optional(),
+  costo_envio: importeSchema.optional(),
   monto_propina: importeSchema.default(0),
   items: itemsPedidoSchema,
   clienteId: idSchema.optional(),
-  estado: estadoPedidoSchema.optional(),
+  estado: z.union([estadoPedidoSchema, z.literal('Esperando pago')]).optional(),
 });
 
 const validarPropina = (datos: {
@@ -78,5 +81,5 @@ export const asignarEnvioSchema = z.strictObject({
 });
 
 export const filtroPedidoSchema = z.object({
-  estado: estadoPedidoSchema.optional(),
+  estado: z.union([estadoPedidoSchema, z.literal('Esperando pago')]).optional(),
 });

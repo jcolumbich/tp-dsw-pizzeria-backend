@@ -1,3 +1,5 @@
+import type { UsuarioToken } from '../auth/auth.middleware.js';
+import { crearPreferencia } from '../pago/pago.service.js';
 import { Pedido } from './pedido.entity.js';
 import { PedidoRepository } from './pedido.repository.js';
 import type { ItemPedidoInput } from './pedido.repository.js';
@@ -16,8 +18,8 @@ export async function buscarPedido(id: number): Promise<Pedido> {
   return pedido;
 }
 
-export async function crearPedido(retiro: unknown, clienteId: unknown, items: unknown, montoPropina: unknown = 0): Promise<Pedido> {
-  const resultado = crearPedidoConClienteSchema.safeParse({ retiro, clienteId, items, monto_propina: montoPropina });
+export async function crearPedido(retiro: unknown, clienteId: unknown, items: unknown, montoPropina: unknown = 0, medioPago: unknown = 'efectivo', checkoutId?: unknown, costoEnvio?: unknown): Promise<Pedido> {
+  const resultado = crearPedidoConClienteSchema.safeParse({ retiro, clienteId, items, monto_propina: montoPropina, medio_pago: medioPago, checkout_id: checkoutId, costo_envio: costoEnvio });
   if (!resultado.success) {
     throw new HttpError(400, resultado.error.issues[0]?.message ?? 'Datos inválidos');
   }
@@ -29,7 +31,7 @@ export async function crearPedido(retiro: unknown, clienteId: unknown, items: un
   const itemsPedido: ItemPedidoInput[] = [...itemsAgrupados.entries()].map(
     ([pizzaId, cantidad]) => ({ pizzaId, cantidad })
   );
-  return repository.addConItems(datos.retiro, datos.clienteId, itemsPedido, datos.monto_propina);
+  return repository.addConItems(datos.retiro, datos.clienteId, itemsPedido, datos.monto_propina, datos.medio_pago, datos.checkout_id, datos.costo_envio);
 }
 
 export async function actualizarPedido(id: number, entrada: Partial<{ retiro: boolean; estado: string }>): Promise<Pedido> {
@@ -68,4 +70,20 @@ export async function asignarEnvio(pedidoId: number, repartidorId: number, costo
 export async function eliminarPedido(id: number): Promise<void> {
   const eliminado = await repository.delete(id);
   if (!eliminado) throw new HttpError(404, 'Pedido no encontrado');
+}
+
+export async function finalizarCompra(datos: Record<string, unknown>, usuario: UsuarioToken) {
+  const pedido = await crearPedido(datos.retiro, usuario.id, datos.items, datos.monto_propina,
+    datos.medio_pago, datos.checkout_id, datos.costo_envio);
+  let checkout: { url: string } | null = null;
+  if (pedido.medio_pago === 'mercadopago' && pedido.estado === 'Esperando pago') {
+    try { checkout = await crearPreferencia(pedido.id, usuario); }
+    catch (error) {
+      console.error(`No se pudo abrir el checkout del pedido ${pedido.id}:`, error instanceof Error ? error.message : 'Error');
+      // 502 señala al cliente que conserve el mismo checkout_id al reintentar.
+      const motivo = error instanceof HttpError ? error.message : 'El proveedor no respondió correctamente; revisá la terminal del backend.';
+      throw new HttpError(502, `No se pudo abrir Mercado Pago. ${motivo} Reintentá esta misma compra; no se duplicará el pedido.`);
+    }
+  }
+  return { ...repository.serializar(pedido), checkoutUrl: checkout?.url };
 }

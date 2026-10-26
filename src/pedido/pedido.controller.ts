@@ -1,3 +1,4 @@
+import { tarifaEnvio } from './pedido.checkout.js';
 import { Request, Response } from 'express';
 import * as service from './pedido.service.js';
 import { handleError } from '../shared/handle-error.js';
@@ -44,8 +45,7 @@ export async function add(req: Request, res: Response) {
     if (req.usuario.nivel_permisos !== 0) {
       return res.status(403).json({ message: 'Solo los clientes pueden crear pedidos' });
     }
-    const { retiro, items, monto_propina } = req.body.pedidoInput;
-    const nuevoPedido = await service.crearPedido(retiro, req.usuario.id, items, monto_propina);
+    const nuevoPedido = await service.finalizarCompra(req.body.pedidoInput, req.usuario);
     return res.status(201).json({ message: 'Pedido creado con éxito', data: nuevoPedido });
   } catch (error) {
     return handleError(res, error);
@@ -90,4 +90,9 @@ export async function asignarEnvio(req: Request, res: Response) {
   } catch (error) {
     return handleError(res, error);
   }
+}
+
+export function consultarTarifa(_req: Request, res: Response) {
+  try { return res.json({ data: { costo: tarifaEnvio() } }); }
+  catch (error) { return handleError(res, error); }
 }

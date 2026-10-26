@@ -66,6 +66,10 @@ export class EnvioRepository {
       if (!actual) return null;
 
       const { envio, pedido } = actual;
+      if (pedido.medio_pago && (
+        (datos.costo !== undefined && datos.costo !== envio.costo) ||
+        (datos.monto_propina !== undefined && datos.monto_propina !== envio.monto_propina)
+      )) throw new HttpError(409, 'El importe y la propina quedaron fijados al comprar');
       if (datos.costo !== undefined) envio.costo = datos.costo;
       if (datos.monto_propina !== undefined) {
         envio.monto_propina = datos.monto_propina;
