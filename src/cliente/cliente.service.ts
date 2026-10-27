@@ -1,4 +1,4 @@
-import { filtroPersonaSchema, validarQuery } from '../shared/listado';
+import { filtroPersonaSchema, validarQuery } from '../shared/listado.js';
 import bcrypt from 'bcryptjs';
 import { Cliente } from './cliente.entity.js';
 import { ClienteRepository } from './cliente.repository.js';
