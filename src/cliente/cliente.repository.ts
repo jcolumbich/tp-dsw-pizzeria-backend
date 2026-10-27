@@ -1,3 +1,5 @@
+import { respuestaPagina, patronBusqueda } from '../shared/listado.js';
+import type { FiltroPersona, Pagina } from '../shared/listado.js';
 import { LockMode } from '@mikro-orm/core';
 import { orm } from '../shared/db/orm.js';
 import { Cliente } from './cliente.entity.js';
@@ -6,6 +8,22 @@ import { Pedido } from '../pedido/pedido.entity.js';
 import { HttpError } from '../shared/http-error.js';
 
 export class ClienteRepository implements Repository<Cliente> {
+  async findPagina(filtros: FiltroPersona): Promise<Pagina<Cliente>> {
+    const consulta = orm.em.createQueryBuilder(Cliente, 'e').select(['id', 'nombre', 'apellido', 'email', 'domicilio', 'estado', 'nivel_permisos']).where({});
+    if (filtros.estado !== undefined) consulta.andWhere({ estado: filtros.estado });
+    // Comparación explícita sin distinguir mayúsculas ni tildes en MySQL.
+    // Cada palabra debe aparecer; los valores se envían como parámetros del ORM.
+    for (const palabra of filtros.busqueda.split(' ').filter(Boolean)) {
+      consulta.andWhere("CONVERT(CONCAT_WS(' ', e.nombre, e.apellido, e.email, e.domicilio) USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ? ESCAPE '!'", [patronBusqueda(palabra)]);
+    }
+    const [data, total] = await consulta
+      .orderBy({ id: 'DESC' })
+      .limit(filtros.limite).offset((filtros.pagina - 1) * filtros.limite)
+      .getResultAndCount();
+    return respuestaPagina(data, total, filtros.pagina, filtros.limite);
+  }
+
+
   async findAll(): Promise<Cliente[]> {
     return orm.em.find(Cliente, {});
   }

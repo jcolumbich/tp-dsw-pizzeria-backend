@@ -1,3 +1,6 @@
+import type { FilterQuery } from '@mikro-orm/core';
+import type { FiltroPedido } from './pedido.schema.js';
+import { respuestaPagina } from '../shared/listado.js';
 import { RequiredEntityData, EntityData, LockMode, EntityManager, wrap } from '@mikro-orm/core';
 import { Pago } from '../pago/pago.entity.js';
 import { estadoPago, centavos } from '../pago/pago.logic.js';
@@ -29,6 +32,24 @@ export class PedidoRepository implements Repository<Pedido> {
     if ((pedido.medio_pago === 'mercadopago' || pago) && estadoPago(pago?.movimientos) !== 'aprobado') {
       throw new HttpError(409, 'El pago debe estar aprobado antes de preparar o entregar el pedido');
     }
+  }
+
+  async findPagina(filtros: FiltroPedido, clienteId?: number) {
+    const where: FilterQuery<Pedido> = {};
+    if (filtros.estado !== undefined) where.estado = filtros.estado;
+    if (filtros.activos !== undefined) {
+      where.estado = filtros.activos ? { $ne: 'Cancelado' } : 'Cancelado';
+    }
+    if (filtros.repartidorId !== undefined) where.repartidor = filtros.repartidorId;
+    // Se aplica SIEMPRE el alcance del usuario, independientemente de los filtros.
+    if (clienteId !== undefined) where.cliente = clienteId;
+    const [data, total] = await orm.em.findAndCount(Pedido, where, {
+      populate: ['detalles', 'detalles.pizza', 'cliente', 'repartidor', 'envio'],
+      orderBy: { dia: 'DESC', id: 'DESC' },
+      limit: filtros.limite,
+      offset: (filtros.pagina - 1) * filtros.limite,
+    });
+    return respuestaPagina(data, total, filtros.pagina, filtros.limite);
   }
 
   async findAll(estado?: string, clienteId?: number): Promise<Pedido[]> {

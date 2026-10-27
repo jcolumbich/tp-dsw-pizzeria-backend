@@ -23,7 +23,7 @@ export class Pizza extends BaseEntity {
   imagen?: string;
 
   @Property({
-    type: Buffer,
+    type: 'Buffer',
     columnType: 'mediumblob',
     nullable: true,
     hidden: true,

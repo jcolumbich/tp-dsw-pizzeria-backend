@@ -1,3 +1,4 @@
+import { camposListado, booleanoQuery, idQuery } from '../shared/listado.js';
 import { z } from 'zod';
 import { importeSchema } from '../shared/numero.schema.js';
 
@@ -80,6 +81,13 @@ export const asignarEnvioSchema = z.strictObject({
   costo: importeSchema,
 });
 
-export const filtroPedidoSchema = z.object({
+export const filtroPedidoSchema = z.strictObject({
+  pagina: camposListado.pagina,
+  limite: camposListado.limite,
   estado: z.union([estadoPedidoSchema, z.literal('Esperando pago')]).optional(),
+  activos: booleanoQuery.optional(),
+  repartidorId: idQuery.optional(),
+}).refine(datos => !(datos.activos !== undefined && datos.estado !== undefined), {
+  message: 'Usá estado o activos, no ambos a la vez',
 });
+export type FiltroPedido = z.infer<typeof filtroPedidoSchema>;

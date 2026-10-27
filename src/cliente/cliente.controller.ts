@@ -4,8 +4,8 @@ import { handleError } from '../shared/handle-error.js';
 
 export async function findAll(req: Request, res: Response) {
   try {
-    const clientes = await service.listarClientes();
-    return res.status(200).json({ message: 'Todos los clientes recuperados', data: clientes });
+    const resultado = await service.listarClientes(req.query);
+    return res.status(200).json({ message: 'Clientes recuperados', ...resultado });
   } catch (error) {
     return handleError(res, error);
   }

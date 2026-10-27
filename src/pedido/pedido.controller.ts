@@ -2,21 +2,12 @@ import { tarifaEnvio } from './pedido.checkout.js';
 import { Request, Response } from 'express';
 import * as service from './pedido.service.js';
 import { handleError } from '../shared/handle-error.js';
-import { filtroPedidoSchema } from './pedido.schema.js';
 
 export async function findAll(req: Request, res: Response) {
   try {
     if (!req.usuario) return res.status(401).json({ message: 'Usuario no autenticado' });
-    const resultado = filtroPedidoSchema.safeParse(req.query);
-    if (!resultado.success) {
-      return res.status(400).json({ message: 'El filtro de estado no es válido' });
-    }
-    const clienteId = req.usuario.nivel_permisos === 0 ? req.usuario.id : undefined;
-    const pedidos = await service.listarPedidos(resultado.data.estado, clienteId);
-    return res.status(200).json({
-      message: req.usuario.nivel_permisos === 0 ? 'Pedidos del cliente recuperados' : 'Todos los pedidos recuperados',
-      data: pedidos
-    });
+    const resultado = await service.listarPedidos(req.query, req.usuario);
+    return res.status(200).json({ message: 'Pedidos recuperados', ...resultado });
   } catch (error) {
     return handleError(res, error);
   }

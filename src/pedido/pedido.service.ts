@@ -1,3 +1,5 @@
+import { validarQuery } from '../shared/listado.js';
+import { filtroPedidoSchema } from './pedido.schema.js';
 import type { UsuarioToken } from '../auth/auth.middleware.js';
 import { crearPreferencia } from '../pago/pago.service.js';
 import { Pedido } from './pedido.entity.js';
@@ -8,8 +10,13 @@ import { crearPedidoConClienteSchema, actualizarPedidoSchema, asignarEnvioSchema
 
 const repository = new PedidoRepository();
 
-export async function listarPedidos(estado?: string, clienteId?: number): Promise<Pedido[]> {
-  return repository.findAll(estado, clienteId);
+export async function listarPedidos(entrada: unknown, usuario: UsuarioToken) {
+  const filtros = validarQuery(filtroPedidoSchema, entrada);
+  const esCliente = usuario.nivel_permisos === 0;
+  if (esCliente && filtros.repartidorId !== undefined) {
+    throw new HttpError(403, 'Solo administración puede filtrar por repartidor');
+  }
+  return repository.findPagina(filtros, esCliente ? usuario.id : undefined);
 }
 
 export async function buscarPedido(id: number): Promise<Pedido> {

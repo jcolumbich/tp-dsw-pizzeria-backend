@@ -1,3 +1,4 @@
+import { filtroPizzaSchema, validarQuery } from '../shared/listado.js';
 import { randomUUID } from 'node:crypto';
 import { Pizza } from './pizza.entity.js';
 import { PizzaRepository } from './pizza.repository.js';
@@ -9,8 +10,9 @@ import type {
 
 const repository = new PizzaRepository();
 
-export async function listarPizzas(): Promise<Pizza[]> {
-  return repository.findAll();
+export async function listarPizzas(entrada: unknown) {
+  const filtros = validarQuery(filtroPizzaSchema, entrada);
+  return repository.findPagina(filtros);
 }
 
 export async function buscarPizza(id: number): Promise<Pizza> {

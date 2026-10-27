@@ -1,3 +1,4 @@
+import { filtroPersonaSchema, validarQuery } from '../shared/listado.js';
 import bcrypt from 'bcryptjs';
 import { Repartidor } from './repartidor.entity.js';
 import { RepartidorRepository } from './repartidor.repository.js';
@@ -20,8 +21,9 @@ async function comprobarMatriculaDisponible(matricula: string, idActual?: number
   if (repetida) throw new HttpError(409, 'Ya existe un repartidor con esa matrícula');
 }
 
-export async function listarRepartidores(): Promise<Repartidor[]> {
-  return repository.findAll();
+export async function listarRepartidores(entrada: unknown) {
+  const filtros = validarQuery(filtroPersonaSchema, entrada);
+  return repository.findPagina(filtros);
 }
 
 export async function buscarRepartidor(id: number): Promise<Repartidor> {

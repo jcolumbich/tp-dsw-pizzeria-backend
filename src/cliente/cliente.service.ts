@@ -1,3 +1,4 @@
+import { filtroPersonaSchema, validarQuery } from '../shared/listado';
 import bcrypt from 'bcryptjs';
 import { Cliente } from './cliente.entity.js';
 import { ClienteRepository } from './cliente.repository.js';
@@ -8,8 +9,9 @@ import { crearClienteSchema, crearClienteDesdeRegistroSchema, actualizarClienteS
 const repository = new ClienteRepository();
 const repartidorRepository = new RepartidorRepository();
 
-export async function listarClientes(): Promise<Cliente[]> {
-  return repository.findAll();
+export async function listarClientes(entrada: unknown) {
+  const filtros = validarQuery(filtroPersonaSchema, entrada);
+  return repository.findPagina(filtros);
 }
 
 export async function buscarCliente(id: number): Promise<Cliente> {

@@ -5,12 +5,8 @@ import { procesarImagenPizza } from './pizza.imagen.js';
 
 export async function findAll(req: Request, res: Response) {
   try {
-    const pizzas = await service.listarPizzas();
-
-    return res.status(200).json({
-      message: 'Todas las pizzas recuperadas',
-      data: pizzas,
-    });
+    const resultado = await service.listarPizzas(req.query);
+    return res.status(200).json({ message: 'Pizzas recuperados', ...resultado });
   } catch (error) {
     return handleError(res, error);
   }
