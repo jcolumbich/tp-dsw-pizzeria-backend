@@ -7,7 +7,7 @@ import { Repository } from '../shared/repository.js';
 
 export class PizzaRepository implements Repository<Pizza> {
   async findPagina(filtros: FiltroPizza): Promise<Pagina<Pizza>> {
-    const consulta = orm.em.createQueryBuilder(Pizza, 'e').select(['id', 'nombre', 'precio', 'vegetariana', 'disponible', 'imagen']).where({ eliminada: false });
+    const consulta = orm.em.createQueryBuilder(Pizza, 'e').select(['id', 'nombre', 'descripcion', 'precio', 'vegetariana', 'disponible', 'imagen']).where({ eliminada: false });
     if (filtros.vegetariana !== undefined) consulta.andWhere({ vegetariana: filtros.vegetariana });
     if (filtros.disponible !== undefined) consulta.andWhere({ disponible: filtros.disponible });
     // Comparación explícita sin distinguir mayúsculas ni tildes en MySQL.

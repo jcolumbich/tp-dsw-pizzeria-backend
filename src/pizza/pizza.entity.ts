@@ -7,6 +7,9 @@ export class Pizza extends BaseEntity {
   @Property({ type: 'string' })
   nombre!: string;
 
+  @Property({ type: 'string', length: 300, nullable: true })
+  descripcion?: string;
+
   @Property({ type: new DecimalNumberType(14, 2) })
   precio!: number;
 

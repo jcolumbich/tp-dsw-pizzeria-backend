@@ -32,6 +32,7 @@ export async function crearPizza(
   const pizza = new Pizza();
 
   pizza.nombre = datos.nombre;
+  pizza.descripcion = datos.descripcion;
   pizza.precio = datos.precio;
   pizza.vegetariana = datos.vegetariana;
   pizza.disponible = datos.disponible;
