@@ -90,7 +90,7 @@ Cada módulo del backend tiene un archivo `.http` (formato REST Client de VS Cod
 
 ## Pull Requests
 
-* Backend: <!-- PEGAR_LINK_PR_BACKEND --> https://github.com/jcolumbich/tp-dsw-pizzeria-backend/pull/NUMERO
+* Backend: <!-- PEGAR_LINK_PR_BACKEND --> https://github.com/jcolumbich/tp-dsw-pizzeria-backend/pull/4
 * Frontend: <!-- PEGAR_LINK_PR_FRONTEND --> https://github.com/jcolumbich/tp-dsw-pizzeria-frontend/pull/NUMERO
 
 ## Contacto para la defensa
