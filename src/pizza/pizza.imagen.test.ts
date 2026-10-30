@@ -3,16 +3,22 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import express from 'express';
 import request from 'supertest';
 import sharp from 'sharp';
+import type { FilterQuery } from '@mikro-orm/core';
+import type { Pizza } from './pizza.entity.js';
 import { handleError } from '../shared/handle-error.js';
 
-const em: any = { findOne: jest.fn(), create: jest.fn(), persistAndFlush: jest.fn() };
+const em = {
+  findOne: jest.fn<(entidad: typeof Pizza, filtro: FilterQuery<Pizza>, opciones?: unknown) => Promise<Pick<Pizza, 'imagenContenido'> | null>>(),
+  create: jest.fn<(entidad: typeof Pizza, datos: Pizza) => Pizza>(),
+  persistAndFlush: jest.fn<(pizza: Pizza) => Promise<void>>(),
+};
 jest.unstable_mockModule('../shared/db/orm.js', () => ({ orm: { em } }));
 const { procesarImagenPizza, servirImagenPizza, recibirImagenPizza } = await import('./pizza.imagen.js');
 const { crearPizza } = await import('./pizza.service.js');
 
 beforeEach(() => {
   jest.resetAllMocks();
-  em.create.mockImplementation((_entidad: any, datos: any) => datos);
+  em.create.mockImplementation((_entidad, datos) => datos);
   em.persistAndFlush.mockResolvedValue(undefined);
 });
 

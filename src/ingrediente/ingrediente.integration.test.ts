@@ -1,75 +1,101 @@
+import 'reflect-metadata';
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
-import { RequestContext } from '@mikro-orm/core';
+import { randomUUID } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { app } from '../app.js';
-import { ClienteRepository } from '../cliente/cliente.repository.js';
 import { Cliente } from '../cliente/cliente.entity.js';
-import { orm } from '../shared/db/orm.js';
+import { Ingrediente } from './ingrediente.entity.js';
+import { orm, syncSchema } from '../shared/db/orm.js';
 
-// GET /api/ingredientes requiere estar autenticado como admin (verificarToken + requiereNivel(1)).
-// Como el registro público de clientes siempre crea usuarios con nivel_permisos 0, para este
-// test creamos directamente en la base de datos de desarrollo (vía repository, sin pasar por
-// HTTP) un cliente admin temporal, generamos su token igual que auth.service.ts, y lo borramos
-// al finalizar para no dejar datos de prueba en la base.
-const EMAIL_ADMIN_TEST = 'admin-test-integracion@example.com';
-
-const clienteRepository = new ClienteRepository();
-let clienteTestId: number;
-let token: string;
+// NODE_ENV=test obliga al ORM a usar DB_TEST_URL, nunca la base habitual.
+// Solo se eliminan las filas creadas por esta ejecución; no se vacían tablas.
+const sufijo = randomUUID();
+const clave = 'Clave-exclusiva-de-integracion-123';
+const nombreIngrediente = `Integracion-${sufijo}`;
+const usuarios: Cliente[] = [];
+let tokenAdmin: string;
+let tokenCliente: string;
+const respuestaLogin = z.object({ data: z.object({ token: z.string().min(1) }) });
+const respuestaIngrediente = z.object({
+  data: z.object({ id: z.number().int().positive(), nombre: z.string(), stock: z.number() }),
+});
 
 beforeAll(async () => {
-  // Fuera de un request HTTP real no existe el RequestContext que app.ts crea por middleware,
-  // así que lo recreamos acá a mano para poder usar los repositories directamente (mismo
-  // patrón que MikroORM recomienda para scripts/tests fuera del ciclo de vida de Express).
-  await RequestContext.createAsync(orm.em, async () => {
-    const existente = await clienteRepository.findByEmail(EMAIL_ADMIN_TEST);
-    if (existente) {
-      await clienteRepository.delete(existente.id);
-    }
-
-    const clienteAdmin = await clienteRepository.add({
-      nombre: 'Admin',
-      apellido: 'DeTest',
-      email: EMAIL_ADMIN_TEST,
-      contrasenia: 'no-se-usa-en-este-test',
-      nivel_permisos: 1,
-      estado: true,
-      domicilio: 'N/A',
-    } as Cliente);
-
-    clienteTestId = clienteAdmin.id;
-
-    token = jwt.sign(
-      {
-        id: clienteAdmin.id,
-        email: clienteAdmin.email,
-        nivel_permisos: clienteAdmin.nivel_permisos,
-      },
-      process.env.JWT_SECRET as string,
-      { expiresIn: '5m' }
-    );
-  });
+  if (process.env.NODE_ENV !== 'test') throw new Error('Ejecutá este test con pnpm run test:integration');
+  await syncSchema();
+  const em = orm.em.fork();
+  const contrasenia = await bcrypt.hash(clave, 10);
+  for (const nivel of [1, 0]) {
+    usuarios.push(em.create(Cliente, {
+      nombre: 'Integracion', apellido: 'Prueba',
+      email: `integracion-${nivel}-${sufijo}@example.com`,
+      contrasenia, nivel_permisos: nivel, estado: true, domicilio: 'Domicilio de prueba',
+    }));
+  }
+  await em.persistAndFlush(usuarios);
+  const tokens: string[] = [];
+  for (const usuario of usuarios) {
+    const respuesta = await request(app).post('/api/auth/login')
+      .send({ email: usuario.email, contrasenia: clave });
+    expect(respuesta.status).toBe(200);
+    tokens.push(respuestaLogin.parse(respuesta.body).data.token);
+  }
+  [tokenAdmin, tokenCliente] = tokens;
 });
 
 afterAll(async () => {
-  await RequestContext.createAsync(orm.em, async () => {
-    if (clienteTestId) {
-      await clienteRepository.delete(clienteTestId);
-    }
-  });
-  await orm.close();
+  try {
+    const em = orm.em.fork();
+    await em.nativeDelete(Ingrediente, { nombre: nombreIngrediente });
+    const ids = usuarios.map(usuario => usuario.id).filter(id => Number.isInteger(id));
+    if (ids.length > 0) await em.nativeDelete(Cliente, { id: { $in: ids } });
+  } finally {
+    await orm.close(true);
+  }
 });
 
-describe('GET /api/ingredientes (integración)', () => {
-  it('responde 200 con { message, data } y data es un array, autenticado como admin', async () => {
-    const respuesta = await request(app)
-      .get('/api/ingredientes')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(respuesta.status).toBe(200);
-    expect(respuesta.body).toHaveProperty('message');
-    expect(respuesta.body).toHaveProperty('data');
-    expect(Array.isArray(respuesta.body.data)).toBe(true);
+describe('API de ingredientes con MySQL real', () => {
+  it('rechaza la consulta sin sesión', async () => {
+    expect((await request(app).get('/api/ingredientes')).status).toBe(401);
+  });
+  it('rechaza un cliente autenticado sin permisos de administrador', async () => {
+    const respuesta = await request(app).get('/api/ingredientes')
+      .set('Authorization', `Bearer ${tokenCliente}`);
+    expect(respuesta.status).toBe(403);
+  });
+  it('rechaza stock negativo antes de persistir', async () => {
+    const respuesta = await request(app).post('/api/ingredientes')
+      .set('Authorization', `Bearer ${tokenAdmin}`)
+      .send({ nombre: nombreIngrediente, stock: -1 });
+    expect(respuesta.status).toBe(400);
+    expect(await orm.em.fork().count(Ingrediente, { nombre: nombreIngrediente })).toBe(0);
+  });
+  it('crea, consulta, lista, actualiza y elimina un ingrediente con stock fraccionario', async () => {
+    const alta = await request(app).post('/api/ingredientes')
+      .set('Authorization', `Bearer ${tokenAdmin}`)
+      .send({ nombre: nombreIngrediente, stock: 10.25 });
+    expect(alta.status).toBe(201);
+    const ingrediente = respuestaIngrediente.parse(alta.body).data;
+    expect(ingrediente.stock).toBe(10.25);
+    const consulta = await request(app).get(`/api/ingredientes/${ingrediente.id}`)
+      .set('Authorization', `Bearer ${tokenAdmin}`);
+    expect(consulta.status).toBe(200);
+    expect(respuestaIngrediente.parse(consulta.body).data).toEqual(ingrediente);
+    const listado = await request(app).get('/api/ingredientes')
+      .set('Authorization', `Bearer ${tokenAdmin}`);
+    expect(listado.status).toBe(200);
+    expect(listado.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: ingrediente.id })]));
+    const actualizacion = await request(app).put(`/api/ingredientes/${ingrediente.id}`)
+      .set('Authorization', `Bearer ${tokenAdmin}`).send({ stock: 7.125 });
+    expect(actualizacion.status).toBe(200);
+    expect(respuestaIngrediente.parse(actualizacion.body).data.stock).toBe(7.125);
+    const guardado = await orm.em.fork().findOneOrFail(Ingrediente, ingrediente.id);
+    expect(guardado.stock).toBe(7.125);
+    const baja = await request(app).delete(`/api/ingredientes/${ingrediente.id}`)
+      .set('Authorization', `Bearer ${tokenAdmin}`);
+    expect(baja.status).toBe(200);
+    expect(await orm.em.fork().findOne(Ingrediente, ingrediente.id)).toBeNull();
   });
 });

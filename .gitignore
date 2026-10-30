@@ -4,3 +4,9 @@ dist/
 *.tsbuildinfo
 .env.production.local
 uploads/
+
+.env.*
+!.env.example
+!.env.test.example
+schema-update.sql
+coverage/

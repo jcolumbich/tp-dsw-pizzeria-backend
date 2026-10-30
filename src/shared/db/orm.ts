@@ -1,12 +1,12 @@
 import 'dotenv/config';
 import { MikroORM } from '@mikro-orm/core';
 import { MySqlDriver } from '@mikro-orm/mysql';
+import { configuracionBase } from './config.js';
 
 export const orm = await MikroORM.init({
   entities: ['dist/**/*.entity.js'],
   entitiesTs: ['src/**/*.entity.ts'],
-  dbName: process.env.DB_NAME || 'pizzeria',
-  clientUrl: process.env.DB_URL || 'mysql://root:1234@localhost:3306/pizzeria',
+  ...configuracionBase(process.env),
   driver: MySqlDriver,
   debug: process.env.NODE_ENV === 'development',
   schemaGenerator: {
@@ -16,6 +16,9 @@ export const orm = await MikroORM.init({
 });
 
 export const syncSchema = async () => {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('La actualización automática del esquema está deshabilitada en producción');
+  }
   const generator = orm.getSchemaGenerator();
-  await generator.updateSchema();
+  await generator.updateSchema({ safe: true, dropTables: false });
 };

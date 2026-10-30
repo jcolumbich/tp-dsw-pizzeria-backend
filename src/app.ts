@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import express from 'express';
 import cors from 'cors';
 import { RequestContext } from '@mikro-orm/core';
-import { orm, syncSchema } from './shared/db/orm.js';
+import { orm } from './shared/db/orm.js';
 import { ingredienteRouter } from './ingrediente/ingrediente.routes.js';
 import { pizzaRouter } from './pizza/pizza.routes.js';
 import { repartidorRouter } from './repartidor/repartidor.routes.js';
@@ -19,10 +19,8 @@ import {
 import { handleError } from './shared/handle-error.js';
 import {
   CARPETA_IMAGENES_PIZZA,
-  importarImagenesLocales,
   servirImagenPizza,
 } from './pizza/pizza.imagen.js';
-import { revisarComprasPendientes } from './pago/pago.service.js';
 import { pagoRouter } from './pago/pago.routes.js';
 
 export const app = express();
@@ -30,7 +28,6 @@ export const app = express();
 const origenesPermitidos = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'https://tp-dsw-pizzeria-frontend.vercel.app',
 ];
 
 const frontendUrl = process.env.FRONTEND_URL?.trim();
@@ -48,9 +45,6 @@ app.use(
 );
 
 app.use(express.json());
-
-await syncSchema();
-await importarImagenesLocales();
 
 app.use((_req, _res, next) => {
   RequestContext.create(orm.em, next);
@@ -134,23 +128,4 @@ app.use((_req, res) => {
   });
 });
 
-if (process.env.JEST_WORKER_ID === undefined) {
-  let revisando = false;
-  const revisar = async () => {
-    if (revisando) return;
-    revisando = true;
-    try { await RequestContext.createAsync(orm.em, revisarComprasPendientes); }
-    catch (error) { console.error('No se pudieron revisar las compras vencidas:', error instanceof Error ? error.message : 'Error'); }
-    finally { revisando = false; }
-  };
-  const intervalo = setInterval(() => { void revisar(); }, 60_000);
-  intervalo.unref();
-  void revisar();
-  const port = Number(process.env.PORT || 3000);
-
-  app.listen(port, () => {
-    console.log(
-      `Servidor corriendo con éxito en http://localhost:${port}`,
-    );
-  });
-}
+export default app;

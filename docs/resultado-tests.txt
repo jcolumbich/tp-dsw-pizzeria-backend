@@ -1,0 +1,16 @@
+$ pnpm run build && node scripts/test.mjs all
+$ tsc -p ./tsconfig.json
+(node:153) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+Test Suites: 10 passed, 10 total
+Tests:       67 passed, 67 total
+Snapshots:   0 total
+Time:        2.739 s, estimated 3 s
+Ran all test suites.
+
+Comprobaciones adicionales realizadas en el mismo MySQL temporal:
+- 0 clientes y 0 ingredientes restantes después de la integración.
+- Arranque production: /api/pizzas 200; /api/ingredientes sin sesión 401.
+- Usuario SQL sin permisos DDL, DB_SYNC_SCHEMA=true: arranque correcto.
+- db:update en production: rechazado antes de ejecutar DDL.

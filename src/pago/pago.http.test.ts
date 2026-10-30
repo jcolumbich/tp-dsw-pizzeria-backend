@@ -4,8 +4,8 @@ import request from 'supertest';
 import { createHmac } from 'node:crypto';
 import { handleError } from '../shared/handle-error.js';
 import { HttpError } from '../shared/http-error.js';
-const consultar: any = jest.fn();
-const sincronizar: any = jest.fn();
+const consultar = jest.fn<typeof import('./pago.service.js').consultarEstado>();
+const sincronizar = jest.fn<typeof import('./pago.service.js').sincronizarPago>();
 jest.unstable_mockModule('./pago.service.js', () => ({ consultarEstado: consultar, sincronizarPago: sincronizar }));
 jest.unstable_mockModule('../auth/auth.middleware.js', () => ({
   verificarToken: (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -21,7 +21,8 @@ app.use('/api/pagos', pagoRouter);
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => handleError(res, error));
 beforeEach(() => {
   jest.resetAllMocks(); process.env.MP_WEBHOOK_SECRET = 'secreto-http-test';
-  consultar.mockResolvedValue({ estado: 'aprobado', estadoPedido: 'Pendiente', puedePagar: false });
+  consultar.mockResolvedValue({ estado: 'aprobado', estadoPedido: 'Pendiente', puedePagar: false,
+    importe: 130, medioPago: 'mercadopago', retiro: false });
 });
 describe('controladores de pagos', () => {
   it('rechaza un webhook sin firma antes de sincronizar', async () => {

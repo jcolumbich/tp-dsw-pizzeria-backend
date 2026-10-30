@@ -3,6 +3,7 @@ import { DetallePedidoRepository } from './detalle-pedido.repository.js';
 import { PizzaRepository } from '../pizza/pizza.repository.js';
 import { PedidoRepository } from '../pedido/pedido.repository.js';
 import { Pedido } from '../pedido/pedido.entity.js';
+import { crearDetalleSchema } from './detalle-pedido.schema.js';
 import { HttpError } from '../shared/http-error.js';
 
 const repository = new DetallePedidoRepository();
@@ -42,34 +43,13 @@ export async function listarPorPedido(
 }
 
 export async function crearDetalle(
-  datos: any
+  datos: unknown
 ): Promise<{ detalle: DetallePedido; pedido: Pedido | null }> {
-  const { cantidad, pizzaId, pedidoId } = datos;
-
-  if (
-    cantidad === undefined ||
-    typeof cantidad !== 'number' ||
-    cantidad <= 0
-  ) {
-    throw new HttpError(
-      400,
-      'La cantidad es requerida y debe ser un número mayor a 0'
-    );
+  const resultado = crearDetalleSchema.safeParse(datos);
+  if (!resultado.success) {
+    throw new HttpError(400, 'cantidad, pizzaId y pedidoId deben ser números enteros positivos válidos');
   }
-
-  if (pizzaId === undefined || typeof pizzaId !== 'number') {
-    throw new HttpError(
-      400,
-      'pizzaId es requerido y debe ser un número'
-    );
-  }
-
-  if (pedidoId === undefined || typeof pedidoId !== 'number') {
-    throw new HttpError(
-      400,
-      'pedidoId es requerido y debe ser un número'
-    );
-  }
+  const { cantidad, pizzaId, pedidoId } = resultado.data;
 
   const pizza = await pizzaRepository.findOne(pizzaId);
 

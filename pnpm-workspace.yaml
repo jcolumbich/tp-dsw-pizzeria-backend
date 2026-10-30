@@ -1,6 +1,9 @@
-packages:
-  - '.'
-  - 'frontend'
+# Solo incluye el paquete de este repositorio.
+overrides:
+  mysql2: 3.24.6
+  qs: 6.16.1
+  proxy-addr: 2.0.8
+  body-parser: 2.4.0
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

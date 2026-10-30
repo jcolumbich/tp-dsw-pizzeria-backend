@@ -53,7 +53,7 @@ export class PedidoRepository implements Repository<Pedido> {
   }
 
   async findAll(estado?: string, clienteId?: number): Promise<Pedido[]> {
-    const filtro: any = {};
+    const filtro: FilterQuery<Pedido> = {};
     if (estado) filtro.estado = estado;
     if (clienteId !== undefined) filtro.cliente = clienteId;
     return orm.em.find(Pedido, filtro, {

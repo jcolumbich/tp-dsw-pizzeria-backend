@@ -1,11 +1,33 @@
 import 'reflect-metadata';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { LockMode } from '@mikro-orm/core';
+import { Pedido } from './pedido.entity.js';
 
-const em: any = {
-  findOne: jest.fn(), find: jest.fn(), count: jest.fn(), create: jest.fn(),
-  persist: jest.fn(), flush: jest.fn(), populate: jest.fn(), remove: jest.fn(),
-  transactional: jest.fn(), assign: jest.fn()
+// Contrato reducido del gestor simulado: no pretende ser un EntityManager real.
+interface GestorPrueba {
+  findOne(entidad: { name: string }, filtro: Record<string, unknown>, opciones?: unknown): Promise<object | null>;
+  find(entidad: { name: string }, filtro: unknown, opciones?: unknown): Promise<object[]>;
+  count(entidad: { name: string }, filtro: unknown): Promise<number>;
+  create(entidad: { name: string }, datos: Record<string, unknown>): object;
+  persist(entidad: object): void;
+  flush(): Promise<void>;
+  populate(entidad: object, relaciones: string[]): Promise<void>;
+  remove(entidad: object): void;
+  transactional(operacion: (gestor: GestorPrueba) => Promise<unknown>): Promise<unknown>;
+  assign(entidad: object, datos: object): void;
+}
+
+const em: jest.Mocked<GestorPrueba> = {
+  findOne: jest.fn<GestorPrueba['findOne']>(),
+  find: jest.fn<GestorPrueba['find']>(),
+  count: jest.fn<GestorPrueba['count']>(),
+  create: jest.fn<GestorPrueba['create']>(),
+  persist: jest.fn<GestorPrueba['persist']>(),
+  flush: jest.fn<GestorPrueba['flush']>(),
+  populate: jest.fn<GestorPrueba['populate']>(),
+  remove: jest.fn<GestorPrueba['remove']>(),
+  transactional: jest.fn<GestorPrueba['transactional']>(),
+  assign: jest.fn<GestorPrueba['assign']>(),
 };
 jest.unstable_mockModule('../shared/db/orm.js', () => ({ orm: { em } }));
 const { PedidoRepository } = await import('./pedido.repository.js');
@@ -17,7 +39,7 @@ const { DetallePedido } = await import('../detalle-pedido/detalle-pedido.entity.
 beforeEach(() => {
   jest.resetAllMocks();
   process.env.COSTO_ENVIO = '1500';
-  em.transactional.mockImplementation(async (operacion: any) => operacion(em));
+  em.transactional.mockImplementation(async (operacion) => operacion(em));
   em.flush.mockResolvedValue(undefined);
   em.populate.mockResolvedValue(undefined);
 });
@@ -26,20 +48,22 @@ describe('pedidos y borrados con historial', () => {
   it('guarda el precio y consumo originales y descuenta stock fraccionario', async () => {
     const pizza = { id: 1, nombre: 'Prueba', precio: 0.1, disponible: true };
     const ingrediente = { id: 7, nombre: 'Queso', stock: 10 };
-    const detalles: any[] = [];
-    let pedido: any;
-    em.findOne.mockImplementation(async (entidad: any) => entidad.name === 'Cliente'
+    const detalles: InstanceType<typeof DetallePedido>[] = [];
+    let pedido: Pedido | null = null;
+    em.findOne.mockImplementation(async (entidad) => entidad.name === 'Cliente'
       ? { id: 1, estado: true } : pedido);
-    em.find.mockImplementation(async (entidad: any) => {
+    em.find.mockImplementation(async (entidad) => {
       if (entidad.name === 'Pizza') return [pizza];
       if (entidad.name === 'IngredientePizza') return [{ pizza, ingrediente, cantidad: 0.1 }];
       return [ingrediente];
     });
-    em.create.mockImplementation((entidad: any, datos: any) => {
+    em.create.mockImplementation((entidad, datos) => {
       if (entidad.name === 'Pedido') {
-        return pedido = { id: 2, ...datos, detalles: { getItems: () => detalles } };
+        pedido = Object.assign(new Pedido(), datos, { id: 2 });
+        jest.spyOn(pedido.detalles, 'getItems').mockReturnValue(detalles);
+        return pedido;
       }
-      const detalle = { ...datos };
+      const detalle = Object.assign(new DetallePedido(), datos);
       detalles.push(detalle);
       return detalle;
     });
@@ -75,7 +99,7 @@ describe('pedidos y borrados con historial', () => {
     em.findOne.mockResolvedValue(pedido);
     em.find.mockResolvedValue([ingrediente]);
     let cola: Promise<unknown> = Promise.resolve();
-    em.transactional.mockImplementation((operacion: any) => {
+    em.transactional.mockImplementation((operacion) => {
       const resultado = cola.then(() => operacion(em));
       cola = resultado.catch(() => undefined);
       return resultado;
@@ -157,19 +181,25 @@ describe('reserva y confirmación según medio de pago', () => {
   it.each(['efectivo', 'mercadopago'] as const)('%s conserva el precio de envío y reserva stock una sola vez', async medio => {
     const pizza = { id: 1, nombre: 'Pizza', precio: 100, disponible: true };
     const ingrediente = { id: 7, stock: 10 };
-    const detalles: any[] = [];
-    let pedido: any;
-    em.findOne.mockImplementation(async (entidad: any, filtro: any) => {
+    const detalles: InstanceType<typeof DetallePedido>[] = [];
+    let pedido: Pedido | null = null;
+    em.findOne.mockImplementation(async (entidad, filtro) => {
       if (entidad.name === 'Cliente') return { id: 1, estado: true };
       if (entidad.name === 'Pago') return null;
       if (filtro.checkout_id) return pedido ?? null;
       return pedido;
     });
-    em.find.mockImplementation(async (entidad: any) => entidad.name === 'Pizza' ? [pizza]
+    em.find.mockImplementation(async (entidad) => entidad.name === 'Pizza' ? [pizza]
       : entidad.name === 'IngredientePizza' ? [{ pizza, ingrediente, cantidad: 1 }] : [ingrediente]);
-    em.create.mockImplementation((entidad: any, datos: any) => {
-      if (entidad.name === 'Pedido') return pedido = { id: 4, ...datos, detalles: { getItems: () => detalles } };
-      detalles.push(datos); return datos;
+    em.create.mockImplementation((entidad, datos) => {
+      if (entidad.name === 'Pedido') {
+        pedido = Object.assign(new Pedido(), datos, { id: 4 });
+        jest.spyOn(pedido.detalles, 'getItems').mockReturnValue(detalles);
+        return pedido;
+      }
+      const detalle = Object.assign(new DetallePedido(), datos);
+      detalles.push(detalle);
+      return detalle;
     });
     const repository = new PedidoRepository();
     const primero = await repository.addConItems(false, 1, [{ pizzaId: 1, cantidad: 2 }], 10, medio, 'uuid', 1500);
@@ -188,7 +218,7 @@ describe('reserva y confirmación según medio de pago', () => {
   it('una reserva vencida y sin pago se cancela y repone una sola vez', async () => {
     const pedido = { id: 4, estado: 'Esperando pago', vence_pago: new Date(0), consumoIngredientes: [{ ingredienteId: 7, cantidad: 2 }] };
     const ingrediente = { id: 7, stock: 8 };
-    em.findOne.mockImplementation(async (entidad: any) => entidad.name === 'Pago' ? null : pedido);
+    em.findOne.mockImplementation(async (entidad) => entidad.name === 'Pago' ? null : pedido);
     em.find.mockResolvedValue([ingrediente]);
     const repository = new PedidoRepository();
     await repository.cancelarConReposicion(4, true);
@@ -198,7 +228,7 @@ describe('reserva y confirmación según medio de pago', () => {
   });
   it('no cancela una reserva con pago en procesamiento', async () => {
     const pedido = { id: 4, estado: 'Esperando pago', vence_pago: new Date(0) };
-    em.findOne.mockImplementation(async (entidad: any) => entidad.name === 'Pago'
+    em.findOne.mockImplementation(async (entidad) => entidad.name === 'Pago'
       ? { movimientos: { '100': { estado: 'pending', reembolsado: 0 } } } : pedido);
     await new PedidoRepository().cancelarConReposicion(4, true);
     expect(pedido.estado).toBe('Esperando pago');
@@ -206,7 +236,7 @@ describe('reserva y confirmación según medio de pago', () => {
   });
   it('impide cambiar el envío ya incluido en la compra', async () => {
     const pedido = { id: 4, medio_pago: 'efectivo', estado: 'En preparación', retiro: false, costo_envio: 1500 };
-    em.findOne.mockImplementation(async (entidad: any) => entidad.name === 'Pago' ? null : pedido);
+    em.findOne.mockImplementation(async (entidad) => entidad.name === 'Pago' ? null : pedido);
     await expect(new PedidoRepository().asignarEnvioConRepartidor(4, 2, 2000)).rejects.toMatchObject({ statusCode: 409 });
   });
 });

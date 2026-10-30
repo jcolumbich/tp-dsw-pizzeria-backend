@@ -16,10 +16,10 @@ export class Pedido extends BaseEntity {
   @Property({ type: 'Date' })
   dia: Date = new Date();
 
-  @Property({ type: new DecimalNumberType(14, 2) })
+  @Property({ type: new DecimalNumberType(14, 2), defaultRaw: '0.00' })
   total: number = 0;
 
-  @Property({ type: new DecimalNumberType(14, 2), default: 0 })
+  @Property({ type: new DecimalNumberType(14, 2), defaultRaw: '0.00' })
   monto_propina: number = 0;
 
   @Property({ type: 'boolean' })

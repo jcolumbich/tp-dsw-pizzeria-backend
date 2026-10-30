@@ -2,14 +2,16 @@ import 'reflect-metadata';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { Pedido } from '../pedido/pedido.entity.js';
 import type { Pago } from './pago.entity.js';
+import { z } from 'zod';
 import type { ContextoPago } from './pago.repository.js';
 
 let pedido: Pedido;
 let pago: Pago | null;
-const consultarMP: any = jest.fn();
-const validarVendedorPrueba: any = jest.fn();
-const cancelar: any = jest.fn();
-const vencidos: any = jest.fn();
+// El mock devuelve respuestas de varios endpoints; el cuerpo se valida al inspeccionarlo.
+const consultarMP = jest.fn<(ruta: string, body?: unknown, metodo?: 'POST' | 'PUT') => Promise<unknown>>();
+const validarVendedorPrueba = jest.fn<typeof import('./mercadopago.client.js').validarVendedorPrueba>();
+const cancelar = jest.fn<import('../pedido/pedido.repository.js').PedidoRepository['cancelarConReposicion']>();
+const vencidos = jest.fn<typeof import('./pago.repository.js').pedidosPorConciliar>();
 jest.unstable_mockModule('./mercadopago.client.js', () => ({
   consultarMP, validarVendedorPrueba,
   variable: (nombre: string) => nombre === 'MP_VENDEDOR_PRUEBA_ID' ? '99' : 'prueba',
@@ -51,8 +53,13 @@ describe('compra y aprobación en el servidor', () => {
     expect(result.url).toContain('mercadopago.com.ar');
     expect(pedido.estado).toBe('Esperando pago');
     expect(validarVendedorPrueba).toHaveBeenCalledTimes(1);
-    const body = consultarMP.mock.calls[0][1] as any;
-    expect(body.items.map((i: any) => i.unit_price * i.quantity)).toEqual([100, 10, 20]);
+    const body = z.object({
+      items: z.array(z.object({ unit_price: z.number(), quantity: z.number() })),
+      expires: z.boolean(),
+      external_reference: z.string(),
+      back_urls: z.object({ success: z.string() }),
+    }).parse(consultarMP.mock.calls[0][1]);
+    expect(body.items.map((i) => i.unit_price * i.quantity)).toEqual([100, 10, 20]);
     expect(body.expires).toBe(true);
     expect(body.external_reference).toBe('ref');
     expect(body.back_urls.success).toBe('https://front.example/mis-pedidos/5');

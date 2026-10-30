@@ -8,7 +8,7 @@ export class Envio extends BaseEntity {
   @Property({ type: new DecimalNumberType(14, 2) })
   costo!: number;
 
-  @Property({ type: new DecimalNumberType(14, 2) })
+    @Property({ type: new DecimalNumberType(14, 2), defaultRaw: '0.00' })
   monto_propina?: number = 0;
 
   @OneToOne(() => Pedido, { owner: true, nullable: false })
