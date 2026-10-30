@@ -22,64 +22,6 @@ El sistema tiene dos tipos de usuario: **cliente** (nivel 0), que consulta la ca
 
 Diagrama entidad-relación del modelo implementado (generado a partir de `src/*/*.entity.ts` del backend). El diagrama original de la propuesta está en [este link](https://drive.google.com/file/d/1xWHBcCBiaYEYtk39Oxa8nYyFgnX6Xuhz/view?usp=sharing).
 
-```mermaid
-erDiagram
-    PERSONA {
-        int id
-        string nombre
-        string apellido
-        string email
-        string contrasenia
-        int nivel_permisos
-    }
-    CLIENTE
-    REPARTIDOR {
-        boolean estado
-        string matricula
-        decimal monto_propina_total
-    }
-    PIZZA {
-        int id
-        string nombre
-        decimal precio
-        boolean vegetariana
-        boolean disponible
-    }
-    INGREDIENTE {
-        int id
-        string nombre
-        decimal stock
-    }
-    INGREDIENTE_PIZZA {
-        decimal cantidad
-    }
-    PEDIDO {
-        int id
-        date fecha
-        string estado
-        boolean retiro
-        decimal total
-    }
-    DETALLE_PEDIDO {
-        int cantidad
-    }
-    ENVIO {
-        int id
-        decimal costo
-    }
-
-    PERSONA ||--o| CLIENTE : "hereda"
-    PERSONA ||--o| REPARTIDOR : "hereda"
-    CLIENTE ||--o{ PEDIDO : "realiza"
-    PEDIDO ||--|{ DETALLE_PEDIDO : "contiene"
-    PIZZA ||--o{ DETALLE_PEDIDO : "se pide en"
-    PIZZA ||--o{ INGREDIENTE_PIZZA : "lleva"
-    INGREDIENTE ||--o{ INGREDIENTE_PIZZA : "se usa en"
-    PEDIDO ||--o| ENVIO : "tiene"
-    REPARTIDOR ||--o{ ENVIO : "realiza"
-```
-
-`Persona` es una entidad abstracta de la que heredan `Cliente` y `Repartidor`. La relación N a N entre Pizza e Ingrediente se resuelve con la entidad intermedia `IngredientePizza` (con el atributo `cantidad`), y la de Pedido con Pizza con `DetallePedido` (con `cantidad`; el subtotal es un valor derivado, no persistido).
 
 ## Alcance Funcional
 
