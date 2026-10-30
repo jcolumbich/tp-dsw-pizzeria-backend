@@ -20,8 +20,7 @@ El sistema tiene dos tipos de usuario: **cliente** (nivel 0), que consulta la ca
 
 ### Modelo
 
-Diagrama entidad-relación del modelo implementado (generado a partir de `src/*/*.entity.ts` del backend). El diagrama original de la propuesta está en [este link](https://drive.google.com/file/d/1xWHBcCBiaYEYtk39Oxa8nYyFgnX6Xuhz/view?usp=sharing).
-
+El diagrama del modelo está en [este link](https://drive.google.com/file/d/1xWHBcCBiaYEYtk39Oxa8nYyFgnX6Xuhz/view?usp=sharing).
 ## Alcance Funcional
 
 ### Alcance Mínimo
