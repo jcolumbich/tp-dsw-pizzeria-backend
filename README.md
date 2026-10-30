@@ -1,3 +1,4 @@
+
 # Backend de la pizzería — TP DSW
 
 API REST desarrollada con **TypeScript, Express, MySQL y MikroORM**, organizada en capas de rutas, controladores, servicios y repositorios.
@@ -15,8 +16,6 @@ Para instalar pnpm:
 ```powershell
 npm install --global pnpm@11.25.0
 ```
-
-El proyecto utiliza `pnpm-workspace.yaml` y `pnpm-lock.yaml`, por lo que se recomienda mantener pnpm como gestor de paquetes.
 
 ## Instalación local
 
@@ -176,12 +175,9 @@ En producción, las modificaciones del esquema se preparan y aplican previamente
 ## API y material de referencia
 
 - [Referencia de endpoints](docs/api.md), complementada por los ejemplos `src/**/*.http`.
-- [Propuesta del TP](proposal.md).
 - [Consigna del TP](https://github.com/utnfrrodsw/tp).
 - [Material oficial de backend](https://github.com/utnfrrodsw/material-be).
 - [Guías de apoyo de backend](https://github.com/joel-arnold/BE-material): TypeScript/Zod, MikroORM y Jest.
-
-El proyecto implementa los CRUD correspondientes y los casos de uso de registrar pedidos y asignar envíos.
 
 ## Dependencias pendientes
 
