@@ -24,7 +24,13 @@ export const crearRepartidorSchema = z.strictObject({
   contrasenia: z
     .string()
     .min(8, 'La contraseña debe tener al menos 8 caracteres')
-    .max(128, 'La contraseña admite hasta 128 caracteres')
+    .refine(
+      (valor) => new TextEncoder().encode(valor).length <= 72,
+      {
+        message:
+          'La contraseña admite hasta 72 bytes UTF-8; algunos caracteres ocupan más de un byte',
+      }
+    )
     .refine(
       (valor) => valor.trim().length > 0,
       { message: 'La contraseña no puede contener solamente espacios' }
