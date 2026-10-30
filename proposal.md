@@ -69,11 +69,6 @@ Diagrama entidad-relación del modelo implementado (generado a partir de `src/*/
 * Base de datos: MySQL en Aiven.
 
 
-
-## Credenciales
-
-Las credenciales de la aplicación deployada (usuario administrador y usuario cliente de demostración) se entregan por el formulario de entrega y se informan en la defensa. No se publican en este repositorio.
-
 ## Documentación de la API
 
 Cada módulo del backend tiene un archivo `.http` (formato REST Client de VS Code) con ejemplos reales de cada endpoint, incluyendo los casos de error esperados (validación, autorización, reglas de negocio):
