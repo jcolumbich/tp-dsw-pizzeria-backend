@@ -383,9 +383,15 @@ Authorization: Bearer {{tokenAdmin}}
 ###
 
 ### --- LIMPIEZA ---
-### No existe DELETE /api/pedidos/:id (no está implementado en pedido.routes.ts).
-### Para "deshacer" un pedido de prueba, lo más parecido es cancelarlo (repone el stock
-### descontado, pero la fila del pedido queda para siempre en la base):
+### DELETE /api/pedidos/:id (solo administrador) CANCELA el pedido: lo pasa a "Cancelado",
+### repone el stock de ingredientes una sola vez y conserva la fila en la base (historial).
+### No lo borra físicamente. Un pedido ya "Entregado" no se puede cancelar (409).
+DELETE {{baseUrl}}/api/pedidos/{{pedidoCreadoId}} HTTP/1.1
+Authorization: Bearer {{tokenAdmin}}
+
+###
+
+### Equivalente: cancelar vía PUT con el estado "Cancelado" (misma reposición de stock).
 PUT {{baseUrl}}/api/pedidos/{{pedidoCreadoId}} HTTP/1.1
 Content-Type: application/json
 Authorization: Bearer {{tokenAdmin}}
